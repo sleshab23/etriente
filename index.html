@@ -1,0 +1,4950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Etriente — a little seaside town of words, art &amp; music</title>
+<meta name="description" content="Etriente: a tiny explorable Italian seaside town that is really a personal blog. Walk around, enter a building, read a post." />
+
+<!-- ==========================================================================
+     GOOGLE FONTS
+     Caveat  = handwriting, used for titles and the town signs
+     Quicksand = rounded, friendly sans, used for all interface text
+     If you are offline these fail silently and the system fonts are used.
+     ========================================================================== -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- ==========================================================================
+     THREE.JS — IMPORT MAP
+     --------------------------------------------------------------------------
+     This is the modern, official way to use Three.js from a CDN without any
+     build tools or npm install. It says: "whenever a module asks for the
+     package named 'three', fetch it from exactly this URL."
+
+     The version is PINNED to 0.160.0 on purpose. If you ever change it,
+     read the Three.js release notes first, because some versions rename
+     things and the scene below would stop working.
+     ========================================================================== -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<!-- A friendly, plain-language error message if Three.js cannot be fetched
+     (no internet, or the file was opened directly from disk with file://).
+     Registered as a classic script so that it is in place BEFORE the module
+     below runs. -->
+<script>
+/* This runs immediately, before anything else, and does two small jobs:
+
+   1. Reveal the loading screen (it is hidden by default — see the CSS).
+   2. Set up the plain-language error panel used if Three.js cannot load. */
+
+// --- 1. reveal the loading screen ---------------------------------------
+document.getElementById('loading').classList.add('ready');
+
+// --- 2. the error panel --------------------------------------------------
+window.__etrienteFailed = false;
+function showStartupError(detail) {
+  if (window.__etrienteFailed) return;
+  window.__etrienteFailed = true;
+  var el = document.getElementById('loading');
+  if (!el) return;
+  el.classList.remove('hidden');
+  el.style.opacity = '1';
+  el.style.pointerEvents = 'auto';
+  el.innerHTML =
+    '<h1 class="load-title">Etriente</h1>' +
+    '<p class="load-note" style="max-width:540px;text-align:center;line-height:1.75">' +
+    '<strong>The town could not be built.</strong><br><br>' +
+    'Three.js could not be loaded. This almost always means one of two things:' +
+    '<br><br>' +
+    '<strong>1 &middot; You opened the file by double-clicking it.</strong><br>' +
+    'Browsers block ES modules on <code>file://</code> addresses. Open the folder ' +
+    'in a terminal and run <code>node tools/serve.mjs</code>, then visit ' +
+    '<code>http://localhost:4173</code>. Or upload the file to Netlify / GitHub Pages.' +
+    '<br><br>' +
+    '<strong>2 &middot; You are offline.</strong><br>' +
+    'The page loads Three.js (and two fonts) from the internet on first visit. ' +
+    'Reconnect and reload.' +
+    '<br><br>' +
+    '<span style="font-size:.8rem;color:#9A6E58">Technical detail: ' + String(detail || 'unknown') + '</span>' +
+    '</p>';
+}
+window.addEventListener('error', function (e) {
+  // Only react to our own script failing, not to a missing font file.
+  var src = (e && e.target && e.target.src) || '';
+  var msg = (e && e.message) || '';
+  if (src.indexOf('three') !== -1 || msg.indexOf('three') !== -1 || msg.indexOf('import') !== -1) {
+    showStartupError(msg || src);
+  }
+}, true);
+window.addEventListener('unhandledrejection', function (e) {
+  var r = e && e.reason;
+  var msg = (r && (r.message || r)) || 'unknown';
+  if (String(msg).indexOf('three') !== -1 || String(msg).indexOf('import') !== -1) {
+    showStartupError(msg);
+  }
+});
+// If nothing has started after 20 seconds, assume the download failed.
+setTimeout(function () {
+  var el = document.getElementById('loading');
+  if (!window.__etrienteFailed && el && !el.classList.contains('hidden')) {
+    var note = document.getElementById('load-note');
+    if (note && note.textContent === 'Waking up the sun…') {
+      showStartupError('still waiting for the Three.js download after 20 seconds');
+    }
+  }
+}, 20000);
+</script>
+
+<style>
+/* ==========================================================================
+   1. DESIGN TOKENS
+   Every colour in the interface comes from here, so you can re-skin the
+   whole site by editing this one block. The 3D colours live in JS (CONFIG).
+   ========================================================================== */
+:root{
+  --cream:#FBF3E4;
+  --peach:#F7CBA6;
+  --pink:#EFB6C1;
+  --sage:#A9C6A0;
+  --sky:#A8CEF0;
+  --terra:#C97B5A;
+  --butter:#F6DE9C;
+  --ink:#4A3B31;
+  --ink-soft:#7C6A5C;
+  --paper:rgba(253,248,239,0.94);
+  --shadow:0 10px 30px rgba(74,59,49,0.18);
+  --shadow-soft:0 4px 14px rgba(74,59,49,0.12);
+  --radius:18px;
+  --font-ui:'Quicksand', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-hand:'Caveat', 'Segoe Script', cursive;
+}
+
+/* ==========================================================================
+   2. GLOBAL RESET + PAGE SHELL
+   ========================================================================== */
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0; padding:0; height:100%; overflow:hidden; background:#F7DFC6;}
+body{
+  font-family:var(--font-ui);
+  color:var(--ink);
+  /* Stop the page from scrolling / zooming when the player drags or pinches */
+  touch-action:none;
+  user-select:none;
+}
+canvas{display:block;}
+
+/* Hidden helper used to measure the scrollbar-free viewport */
+.noscript{
+  position:fixed; inset:0; display:grid; place-items:center; padding:2rem;
+  background:var(--cream); text-align:center; font-size:1.1rem; z-index:9999;
+}
+
+/* ==========================================================================
+   3. THE 3D CANVAS + THE CINEMATIC VIGNETTE ON TOP OF IT
+   ========================================================================== */
+#scene{position:fixed; inset:0; width:100%; height:100%;}
+
+/* A soft dark edge that makes the pastel scene feel like a storybook plate */
+#vignette{
+  position:fixed; inset:0; pointer-events:none; z-index:5;
+  background:radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 45%, rgba(90,60,35,0.22) 100%);
+  mix-blend-mode:multiply;
+}
+
+/* ==========================================================================
+   4. LOADING SCREEN
+   --------------------------------------------------------------------------
+   The loading screen starts hidden. A classic <script> in the <head> adds
+   the .ready class as soon as it runs, which reveals it — so the screen is
+   on before Three.js has even finished downloading from the CDN, but it
+   never flashes if JavaScript is switched off.
+   ========================================================================== */
+#loading{
+  position:fixed; inset:0; z-index:100; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:1.4rem;
+  background:linear-gradient(170deg,#FBEAD0 0%,#F7CBA6 55%,#EFB6C1 100%);
+  transition:opacity .7s ease;
+  opacity:0; pointer-events:none;
+}
+#loading.ready{opacity:1; pointer-events:auto;}
+#loading.hidden{opacity:0; pointer-events:none;}
+.load-title{
+  font-family:var(--font-hand); font-size:clamp(2.6rem,9vw,4.4rem); margin:0;
+  color:#8E5A44; letter-spacing:.01em;
+}
+.load-sub{margin:0; color:#9A6E58; font-size:.95rem; letter-spacing:.06em; text-transform:uppercase;}
+.load-track{width:min(320px,72vw); height:10px; border-radius:99px; background:rgba(255,255,255,.55); overflow:hidden;}
+.load-fill{height:100%; width:0%; border-radius:99px; background:linear-gradient(90deg,#C97B5A,#F6DE9C); transition:width .25s ease;}
+.load-note{margin:0; font-size:.85rem; color:#9A6E58; min-height:1.2em;}
+
+/* ==========================================================================
+   5. TITLE SCREEN — also the moment the browser unlocks audio
+   ========================================================================== */
+#title{
+  position:fixed; inset:0; z-index:90; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:1.1rem; text-align:center; padding:2rem;
+  background:linear-gradient(165deg,#FDF1DC 0%,#F7CBA6 50%,#EFB6C1 100%);
+  transition:opacity .8s ease;
+}
+#title.hidden{opacity:0; pointer-events:none;}
+.title-card{
+  background:var(--paper); border-radius:26px; padding:2.4rem 2.6rem;
+  box-shadow:var(--shadow); max-width:min(560px,92vw); border:2px solid rgba(201,123,90,.22);
+}
+.title-h1{
+  font-family:var(--font-hand); font-size:clamp(3rem,12vw,5.2rem); margin:0 0 .3rem;
+  color:#B4664A; line-height:.95;
+}
+.title-h2{
+  font-family:var(--font-ui); font-weight:500; font-size:clamp(.9rem,2.6vw,1.05rem);
+  margin:0 0 1.6rem; color:var(--ink-soft); line-height:1.5;
+}
+.btn{
+  font-family:var(--font-ui); font-weight:600; font-size:1rem; cursor:pointer;
+  border:none; border-radius:99px; padding:.85rem 1.9rem; color:#fff;
+  background:linear-gradient(180deg,#D98B67,#C97B5A);
+  box-shadow:0 6px 0 #A9603F, var(--shadow-soft);
+  transition:transform .12s ease, box-shadow .12s ease;
+}
+.btn:hover{transform:translateY(-2px); box-shadow:0 8px 0 #A9603F, var(--shadow);}
+.btn:active{transform:translateY(3px); box-shadow:0 3px 0 #A9603F;}
+.btn.ghost{
+  background:var(--paper); color:var(--ink); box-shadow:0 4px 0 rgba(201,123,90,.35);
+  border:2px solid rgba(201,123,90,.28);
+}
+.btn.ghost:hover{box-shadow:0 6px 0 rgba(201,123,90,.35);}
+.title-hint{margin:1.2rem 0 0; font-size:.82rem; color:var(--ink-soft); line-height:1.6;}
+.key{
+  display:inline-block; font-family:var(--font-ui); font-weight:700; font-size:.72rem;
+  background:#fff; border:1px solid rgba(74,59,49,.2); border-bottom-width:2px;
+  border-radius:6px; padding:.05rem .38rem; margin:0 .1rem; color:var(--ink);
+}
+
+/* ==========================================================================
+   6. IN-GAME HUD (corner widgets)
+   ========================================================================== */
+#hud{position:fixed; inset:0; z-index:20; pointer-events:none;}
+#hud > *{pointer-events:auto;}
+.hud-panel{
+  background:var(--paper); border-radius:var(--radius); box-shadow:var(--shadow-soft);
+  border:2px solid rgba(201,123,90,.2);
+}
+
+/* --- mini map (top-left) --- */
+#minimap-wrap{position:absolute; top:14px; left:14px; padding:8px; width:154px;}
+#minimap{border-radius:11px; display:block; width:138px; height:138px;}
+#minimap-label{
+  font-size:.62rem; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-soft);
+  text-align:center; margin-top:5px;
+}
+
+/* --- buttons (top-right) --- */
+#hud-buttons{position:absolute; top:14px; right:14px; display:flex; gap:8px;}
+.icon-btn{
+  width:44px; height:44px; border-radius:14px; border:2px solid rgba(201,123,90,.2);
+  background:var(--paper); box-shadow:var(--shadow-soft); cursor:pointer;
+  display:grid; place-items:center; font-size:1.15rem; color:var(--ink);
+  transition:transform .12s ease, background .12s ease;
+}
+.icon-btn:hover{transform:translateY(-2px);}
+.icon-btn:active{transform:translateY(1px);}
+.icon-btn.on{background:var(--butter); border-color:rgba(201,123,90,.45);}
+
+/* --- location title (bottom-left) --- */
+#place-card{
+  position:absolute; left:14px; bottom:calc(14px + env(safe-area-inset-bottom,0px));
+  padding:9px 15px; max-width:min(320px,60vw);
+}
+#place-name{font-family:var(--font-hand); font-size:1.4rem; line-height:1.05; color:#A9603F;}
+#place-note{font-size:.72rem; color:var(--ink-soft); line-height:1.35;}
+
+/* ==========================================================================
+   7. INTERACTION PROMPT (the floating "Press E" hint)
+   ========================================================================== */
+#prompt{
+  position:fixed; left:50%; bottom:26%; transform:translate(-50%,12px);
+  z-index:24; padding:9px 18px; border-radius:99px; background:var(--paper);
+  box-shadow:var(--shadow); border:2px solid rgba(201,123,90,.3);
+  font-size:.9rem; font-weight:600; color:var(--ink); white-space:nowrap;
+  opacity:0; pointer-events:none; transition:opacity .18s ease, transform .18s ease;
+}
+#prompt.show{opacity:1; transform:translate(-50%,0);}
+#prompt .pk{
+  display:inline-block; background:var(--terra); color:#fff; border-radius:7px;
+  padding:.02rem .42rem; margin-right:.35rem; font-size:.78rem; font-weight:700;
+}
+
+/* ==========================================================================
+   8. FULL-SCREEN OVERLAYS (map, blog pages, menu)
+   ========================================================================== */
+.overlay{
+  position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
+  padding:clamp(10px,2.5vw,26px); background:rgba(74,59,49,.45);
+  backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+  opacity:0; pointer-events:none; transition:opacity .28s ease;
+}
+.overlay.show{opacity:1; pointer-events:auto;}
+.sheet{
+  background:var(--cream); border-radius:24px; box-shadow:var(--shadow);
+  border:3px solid rgba(201,123,90,.28); width:100%; max-width:920px;
+  max-height:92vh; display:flex; flex-direction:column; overflow:hidden;
+  transform:translateY(14px) scale(.985); transition:transform .28s cubic-bezier(.2,.9,.25,1);
+}
+.overlay.show .sheet{transform:none;}
+.sheet-head{
+  display:flex; align-items:center; gap:14px; padding:15px 18px;
+  border-bottom:2px dashed rgba(201,123,90,.3);
+  background:linear-gradient(180deg,#FDF3E3,#F8E7CE);
+}
+.sheet-badge{
+  width:46px; height:46px; border-radius:14px; flex:none; display:grid; place-items:center;
+  font-size:1.35rem; background:#fff; box-shadow:var(--shadow-soft);
+}
+.sheet-titles{flex:1; min-width:0;}
+.sheet-title{font-family:var(--font-hand); font-size:1.85rem; margin:0; color:#A9603F; line-height:1;}
+.sheet-desc{font-size:.78rem; color:var(--ink-soft); margin:2px 0 0;}
+.sheet-body{padding:20px; overflow-y:auto; overscroll-behavior:contain;}
+.close-x{
+  width:38px; height:38px; border-radius:50%; border:2px solid rgba(201,123,90,.25);
+  background:#fff; cursor:pointer; font-size:1.1rem; color:var(--ink); flex:none;
+}
+.close-x:hover{background:var(--pink);}
+
+/* --- blog post cards inside an overlay --- */
+.post{
+  background:#fff; border-radius:16px; padding:14px 16px; margin-bottom:12px;
+  border:2px solid rgba(168,206,240,.4); box-shadow:var(--shadow-soft); cursor:pointer;
+  transition:transform .14s ease, border-color .14s ease;
+}
+.post:hover{transform:translateY(-2px); border-color:var(--sky);}
+.post-date{font-size:.68rem; text-transform:uppercase; letter-spacing:.1em; color:#B08E76;}
+.post-title{font-family:var(--font-hand); font-size:1.5rem; margin:.15rem 0 .3rem; color:#7A5A46;}
+.post-excerpt{margin:0; font-size:.87rem; line-height:1.55; color:var(--ink-soft);}
+.post-body{display:none; margin-top:.7rem; padding-top:.7rem; border-top:1px dashed rgba(201,123,90,.3); font-size:.9rem; line-height:1.65; color:#5C4A3E;}
+.post.open{border-color:var(--terra);}
+.post.open .post-body{display:block; animation:fadeIn .3s ease;}
+@keyframes fadeIn{from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:none;}}
+.empty-note{text-align:center; color:var(--ink-soft); font-size:.9rem; padding:2rem 1rem;}
+
+/* --- the 2D town map --- */
+#map-sheet{max-width:860px;}
+#map-stage{position:relative; width:100%; aspect-ratio:1/1; max-height:64vh; margin-inline:auto;}
+#map-canvas{width:100%; height:100%; display:block; border-radius:16px; border:2px solid rgba(201,123,90,.25);}
+.map-pin{
+  position:absolute; transform:translate(-50%,-50%); cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; gap:3px; border:none; background:none;
+  padding:0; font-family:var(--font-ui);
+}
+.map-pin .pin-dot{
+  width:26px; height:26px; border-radius:50%; border:3px solid #fff; box-shadow:var(--shadow-soft);
+  display:grid; place-items:center; font-size:.8rem; transition:transform .14s ease;
+}
+.map-pin .pin-tag{
+  font-size:.68rem; font-weight:600; background:var(--paper); border-radius:99px;
+  padding:.1rem .5rem; color:var(--ink); box-shadow:var(--shadow-soft); white-space:nowrap;
+}
+.map-pin:hover .pin-dot, .map-pin:focus-visible .pin-dot{transform:scale(1.22);}
+.map-pin.here .pin-dot{outline:3px solid var(--terra); outline-offset:2px;}
+#map-info{
+  margin-top:12px; padding:12px 14px; border-radius:14px; background:#fff;
+  border:2px dashed rgba(201,123,90,.3); font-size:.85rem; line-height:1.55; min-height:64px;
+}
+#map-info strong{font-family:var(--font-hand); font-size:1.3rem; color:#A9603F; display:block; margin-bottom:.15rem;}
+#map-info .go{margin-top:.6rem; display:inline-flex; gap:8px;}
+
+/* --- help / controls sheet --- */
+.help-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px;}
+.help-row{display:flex; align-items:center; gap:10px; background:#fff; border-radius:12px; padding:10px 12px; border:2px solid rgba(168,206,240,.35); font-size:.85rem;}
+.help-row .k{flex:none; display:flex; gap:3px;}
+
+/* ==========================================================================
+   9. FADE-TO-BLACK TRANSITION (used when entering a building)
+   ========================================================================== */
+#fade{
+  position:fixed; inset:0; z-index:60; background:#3B2E27; opacity:0;
+  pointer-events:none; transition:opacity .45s ease;
+}
+#fade.on{opacity:1; pointer-events:auto;}
+#fade .fade-word{
+  position:absolute; inset:0; display:grid; place-items:center;
+  font-family:var(--font-hand); font-size:2.4rem; color:var(--cream); opacity:0;
+}
+#fade.on .fade-word{opacity:1; transition:opacity .3s ease .18s;}
+
+/* ==========================================================================
+   10. MOBILE TOUCH CONTROLS
+   ========================================================================== */
+#touch-ui{position:fixed; inset:0; z-index:22; pointer-events:none; display:none;}
+#touch-ui.on{display:block;}
+#joystick{
+  position:absolute; left:calc(20px + env(safe-area-inset-left,0px));
+  bottom:calc(24px + env(safe-area-inset-bottom,0px));
+  width:132px; height:132px; border-radius:50%;
+  background:rgba(253,248,239,.42); border:2px solid rgba(201,123,90,.35);
+  pointer-events:auto; touch-action:none;
+}
+#joy-knob{
+  position:absolute; left:50%; top:50%; width:56px; height:56px; border-radius:50%;
+  transform:translate(-50%,-50%); background:rgba(201,123,90,.75);
+  border:2px solid rgba(255,255,255,.8); box-shadow:var(--shadow-soft);
+}
+#btn-interact{
+  position:absolute; right:calc(22px + env(safe-area-inset-right,0px));
+  bottom:calc(34px + env(safe-area-inset-bottom,0px));
+  width:78px; height:78px; border-radius:50%; border:3px solid rgba(255,255,255,.85);
+  background:linear-gradient(180deg,#D98B67,#C97B5A); color:#fff; font-weight:700; font-size:.82rem;
+  box-shadow:var(--shadow); pointer-events:auto; touch-action:none;
+}
+#btn-interact:disabled{opacity:.35;}
+
+/* ==========================================================================
+   11. SMALL SCREENS
+   ========================================================================== */
+@media (max-width:640px){
+  #minimap-wrap{width:108px; padding:6px;}
+  #minimap{width:94px; height:94px;}
+  #minimap-label{font-size:.55rem;}
+  .icon-btn{width:40px; height:40px; font-size:1rem; border-radius:12px;}
+  #place-card{padding:7px 11px; max-width:52vw;}
+  #place-name{font-size:1.15rem;}
+  #place-note{display:none;}
+  .sheet-title{font-size:1.5rem;}
+  #prompt{bottom:31%; font-size:.82rem;}
+}
+</style>
+</head>
+
+<body>
+
+<!-- ==========================================================================
+     THE 3D CANVAS
+     ========================================================================== -->
+<canvas id="scene"></canvas>
+<div id="vignette"></div>
+
+<!-- ==========================================================================
+     HUD — mini map, buttons, current place
+     ========================================================================== -->
+<div id="hud">
+  <div id="minimap-wrap" class="hud-panel">
+    <canvas id="minimap" width="276" height="276"></canvas>
+    <div id="minimap-label">Etriente</div>
+  </div>
+
+  <div id="hud-buttons">
+    <button class="icon-btn" id="btn-map"    title="Town map (M)"   aria-label="Open town map">🗺️</button>
+    <button class="icon-btn" id="btn-sound"  title="Sound on/off"    aria-label="Toggle sound">🔈</button>
+    <button class="icon-btn" id="btn-help"   title="Controls (Esc)"  aria-label="Show controls">❔</button>
+  </div>
+
+  <div id="place-card" class="hud-panel">
+    <div id="place-name">Piazza del Sole</div>
+    <div id="place-note">The heart of Etriente. Look for the town map board.</div>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     INTERACTION PROMPT
+     ========================================================================== -->
+<div id="prompt"><span class="pk">E</span><span id="prompt-text">Interact</span></div>
+
+<!-- ==========================================================================
+     FADE TRANSITION
+     ========================================================================== -->
+<div id="fade"><div class="fade-word" id="fade-word"></div></div>
+
+<!-- ==========================================================================
+     OVERLAY: TOWN MAP
+     ========================================================================== -->
+<div class="overlay" id="ov-map">
+  <div class="sheet" id="map-sheet">
+    <div class="sheet-head">
+      <div class="sheet-badge">🗺️</div>
+      <div class="sheet-titles">
+        <h2 class="sheet-title">Map of Etriente</h2>
+        <div class="sheet-desc">Tap a place for directions, or quick-travel straight there.</div>
+      </div>
+      <button class="close-x" data-close="ov-map" aria-label="Close map">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div id="map-stage">
+        <canvas id="map-canvas" width="1200" height="1200"></canvas>
+        <!-- Location pins are inserted here by JavaScript -->
+      </div>
+      <div id="map-info">Pick a place on the map to see what is there.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     OVERLAY: BLOG SECTION (content injected from BLOG_CONTENT)
+     ========================================================================== -->
+<div class="overlay" id="ov-blog">
+  <div class="sheet">
+    <div class="sheet-head">
+      <div class="sheet-badge" id="blog-badge">📖</div>
+      <div class="sheet-titles">
+        <h2 class="sheet-title" id="blog-title">Section</h2>
+        <div class="sheet-desc" id="blog-desc"></div>
+      </div>
+      <button class="close-x" data-close="ov-blog" aria-label="Back to town">✕</button>
+    </div>
+    <div class="sheet-body" id="blog-body"></div>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     OVERLAY: A SMALL FRIENDLY NOTICE
+     Used by the cozy spots (benches, café tables) that become interactive
+     seating areas in Stage 2. It gives immediate, honest feedback rather
+     than silently doing nothing.
+     ========================================================================== -->
+<div class="overlay" id="ov-notice">
+  <div class="sheet" style="max-width:520px">
+    <div class="sheet-head">
+      <div class="sheet-badge" id="notice-badge">🪑</div>
+      <div class="sheet-titles">
+        <h2 class="sheet-title" id="notice-title">Notice</h2>
+        <div class="sheet-desc" id="notice-sub"></div>
+      </div>
+      <button class="close-x" data-close="ov-notice" aria-label="Close">✕</button>
+    </div>
+    <div class="sheet-body">
+      <p id="notice-text" style="margin:0; font-size:.9rem; line-height:1.7; color:#5C4A3E"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     OVERLAY: HELP / CONTROLS
+     ========================================================================== -->
+<div class="overlay" id="ov-help">
+  <div class="sheet" style="max-width:640px">
+    <div class="sheet-head">
+      <div class="sheet-badge">❔</div>
+      <div class="sheet-titles">
+        <h2 class="sheet-title">How to explore</h2>
+        <div class="sheet-desc">Etriente is a little town you walk around. Every building is a part of the blog.</div>
+      </div>
+      <button class="close-x" data-close="ov-help" aria-label="Close help">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="help-grid">
+        <div class="help-row"><span class="k"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span></span> Walk around</div>
+        <div class="help-row"><span class="k"><span class="key">↑</span><span class="key">←</span><span class="key">↓</span><span class="key">→</span></span> Also walk around</div>
+        <div class="help-row"><span class="k"><span class="key">Shift</span></span> Run</div>
+        <div class="help-row"><span class="k"><span class="key">E</span></span> Enter / interact</div>
+        <div class="help-row"><span class="k"><span class="key">M</span></span> Town map</div>
+        <div class="help-row"><span class="k"><span class="key">C</span></span> Change camera zoom</div>
+        <div class="help-row"><span class="k"><span class="key">Esc</span></span> Close / pause</div>
+        <div class="help-row"><span class="k">🖱️ <span class="key">drag</span></span> Look around</div>
+        <div class="help-row"><span class="k">📱</span> Joystick + <strong>A</strong> button on touch screens</div>
+      </div>
+      <p style="font-size:.85rem; line-height:1.6; color:var(--ink-soft); margin:16px 0 0">
+        Five buildings hold the blog: the <strong>Bookstore</strong> (reading &amp; writing), the
+        <strong>Art Studio</strong> (animation &amp; design), the <strong>Record Store</strong> (music),
+        the <strong>Library</strong> (learning) and the <strong>Little Home</strong> (diary &amp; memories).
+        The stone map board in the middle of the square opens the town map.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     LOADING SCREEN
+     ========================================================================== -->
+<div id="loading">
+  <h1 class="load-title">Etriente</h1>
+  <p class="load-sub">Building the town</p>
+  <div class="load-track"><div class="load-fill" id="load-fill"></div></div>
+  <p class="load-note" id="load-note">Warming up the sun…</p>
+</div>
+
+<!-- ==========================================================================
+     TITLE SCREEN
+     ========================================================================== -->
+<div id="title" class="hidden">
+  <div class="title-card">
+    <h1 class="title-h1">Etriente</h1>
+    <p class="title-h2">a little seaside town of words, art &amp; music</p>
+    <button class="btn" id="btn-start">Start Exploring</button>
+    <p class="title-hint">
+      <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> to walk ·
+      drag to look · <span class="key">E</span> to enter a building<br>
+      On a phone: joystick bottom-left, <strong>A</strong> button bottom-right.
+    </p>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     MOBILE TOUCH CONTROLS
+     ========================================================================== -->
+<div id="touch-ui">
+  <div id="joystick"><div id="joy-knob"></div></div>
+  <button id="btn-interact" disabled>ENTER</button>
+</div>
+
+<noscript><div class="noscript">Etriente needs JavaScript enabled to build the town.</div></noscript>
+
+<!-- ==========================================================================
+     THE MODULE SCRIPT
+     Everything below is one ES module. It is split into clearly numbered
+     sections so you can find things:
+        1. BLOG_CONTENT ....... your writing, in one object
+        2. CONFIG ............. colours, sizes, speed, tunable numbers
+        3. Small helpers ...... maths and geometry utilities
+        4. Procedural textures  canvas-drawn cobbles, stucco, signs
+        5. Toon look .......... gradient map, outline (inverted hull)
+        6. Scene setup ........ renderer, camera, lights, sky, sea
+        7. Town builders ...... each part of the town
+        8. The character ...... rig + walk/idle animation
+        9. Input & controls ... keyboard, mouse, touch
+       10. Camera ............. third-person follow camera
+       11. Interaction ....... prompts, entering buildings
+       12. UI ................ overlays, map, mini map, HUD
+       13. Main loop ......... update + render
+     ========================================================================== -->
+<script type="module">
+/* ==========================================================================
+   Imports
+   --------------------------------------------------------------------------
+   `three` is resolved by the import map in the <head>, which points it at a
+   pinned Three.js build on a CDN. Aliasing it to the name THREE means every
+   line below reads exactly like the official Three.js examples.
+   ========================================================================== */
+import * as THREE from 'three';
+
+// Handy while learning: this puts the whole Three.js library on `window.THREE`
+// so you can poke at it from the browser console (press F12 and try
+// `THREE.REVISION`). It changes nothing about how the site works.
+window.THREE = THREE;
+
+/* ==========================================================================
+   SECTION 1 — BLOG_CONTENT
+   --------------------------------------------------------------------------
+   THIS IS THE ONLY PLACE YOU NEED TO EDIT TO ADD YOUR OWN WRITING.
+
+   For each of the five buildings you get:
+     name      the title shown on the overlay
+     emoji     the little icon in the overlay header
+     desc      the one-line description under the title
+     posts     an array of posts. Each post is:
+                 title   (required) the post name
+                 date    (required) anything readable, e.g. "12 Jan 2025"
+                 excerpt (required) one or two sentences shown in the list
+                 body    (optional) longer text; if present the card can be
+                         clicked to expand. Plain text is fine — line breaks
+                         are preserved. Leave it out and the card just shows
+                         the excerpt.
+
+   To add a post: copy one { ... } block, paste it, and change the text.
+   Keep the commas between blocks!
+   ========================================================================== */
+const BLOG_CONTENT = {
+
+  bookstore: {
+    name: "The Dog-Eared Page",
+    emoji: "📚",
+    desc: "Reading & writing — what I'm reading, and how I write",
+    accent: "#C97B5A",
+    posts: [
+      {
+        title: "Reading slowly on purpose",
+        date: "12 January 2025",
+        excerpt: "I used to race through books to hit a number. This year I stopped counting and started rereading. Here is what changed.",
+        body: "I used to race through books to hit a number. This year I stopped counting.\n\nRereading turned out to be the whole trick. The second pass is where a book actually lands — the first pass is just me finding out what happens, and the second is where I notice how it was built.\n\nThree things I do now: I keep a pencil in the book, I write one sentence about it when I finish, and I allow myself to abandon anything after fifty pages without guilt."
+      },
+      {
+        title: "On keeping a commonplace book",
+        date: "28 December 2024",
+        excerpt: "One notebook, no system, no index. Just lines worth remembering, copied by hand, in the order I met them.",
+        body: "A commonplace book is the oldest productivity hack there is: you copy out the sentences that struck you, by hand, into one notebook.\n\nNo tags. No folders. No app. The friction of writing by hand is the feature — you only copy the lines you actually care about.\n\nMine lives on the kitchen table, which means it gets written in while the kettle boils."
+      },
+      {
+        title: "Writing badly, then fixing it",
+        date: "3 December 2024",
+        excerpt: "The first draft is not a draft, it is a place to find out what I think. Editing is where the writing happens.",
+        excerptNote: "",
+        body: "The first draft is not a draft. It is a place to find out what I think.\n\nI now write the ugly version without stopping — no backspace, no rereading — and only afterwards do I put on the editor hat. Two passes, two different people.\n\nIt is slower than it sounds, and much faster than staring at a blank page."
+      }
+    ]
+  },
+
+  artstudio: {
+    name: "Studio Luciola",
+    emoji: "🎨",
+    desc: "Animation & design — frames, colour, and interface details",
+    accent: "#EFB6C1",
+    posts: [
+      {
+        title: "Twelve frames is enough",
+        date: "9 January 2025",
+        excerpt: "A walk cycle does not need twenty-four drawings. It needs twelve good ones and a confident inbetween.",
+        body: "A walk cycle does not need twenty-four drawings. It needs twelve good ones and a confident inbetween.\n\nWhen I stopped polishing every frame and started designing the spacing instead, the animation got smoother, not rougher.\n\nSpacing is the animation. The drawings are just where you hang it."
+      },
+      {
+        title: "Colour palettes from the seaside",
+        date: "21 December 2024",
+        excerpt: "Every colour in this town came from one afternoon on a jetty: peach light, sage shutters, terracotta roofs.",
+        body: "Every colour in this town came from one afternoon on a jetty.\n\nPeach light on plaster. Sage green shutters with the paint going chalky. Terracotta roofs, dusty pink flowers, one impossible blue sea.\n\nThe rule I kept: nothing fully saturated, and always one warm colour against the cool ones."
+      },
+      {
+        title: "Designing a camera you never fight",
+        date: "2 December 2024",
+        excerpt: "Good third-person cameras are boring on purpose. They damp, they wait, they never snatch the view away.",
+        body: "Good third-person cameras are boring on purpose.\n\nThey damp every movement, they wait for you to stop turning, and they never snatch the view away to show you something 'cool'.\n\nIf the player notices the camera, it is doing too much."
+      }
+    ]
+  },
+
+  recordstore: {
+    name: "Disco Marea",
+    emoji: "🎵",
+    desc: "Music — what is on, what it is for, and how it sounds",
+    accent: "#A9C6A0",
+    posts: [
+      {
+        title: "The four-chord loop",
+        date: "14 January 2025",
+        excerpt: "Most of what I love is four chords and a lot of patience. A loop is not lazy — it is a room you invite someone into.",
+        body: "Most of what I love is four chords and a lot of patience.\n\nA loop is not lazy. It is a room you invite someone into, and the whole craft is in how long you let them stay before you move a single thing.\n\nI keep a rule: change one element every eight bars, and never two at once."
+      },
+      {
+        title: "Ambient sound is half the picture",
+        date: "30 December 2024",
+        excerpt: "Waves, gulls, a distant radio. Place is mostly what you hear, not what you see.",
+        body: "Place is mostly what you hear, not what you see.\n\nThe sea is a slow noise wash with a soft filter. Gulls are three short sine blips at random intervals — irregular timing is what makes them read as alive.\n\nNone of it needs a single audio file."
+      },
+      {
+        title: "Records that smell of summer",
+        date: "8 December 2024",
+        excerpt: "A short list of albums that only work with the windows open.",
+        body: "A short list of albums that only work with the windows open.\n\nThe test is simple: if it still sounds right in February, it is not a summer record, it is just a good record — which is a different, better thing."
+      }
+    ]
+  },
+
+  library: {
+    name: "Biblioteca Azzurra",
+    emoji: "🎓",
+    desc: "Learning — notes from studying, teaching and figuring things out",
+    accent: "#A8CEF0",
+    posts: [
+      {
+        title: "Fifty minutes, then stop",
+        date: "11 January 2025",
+        excerpt: "The most useful study habit I have is a timer. Deep work has a shape, and the shape is roughly fifty minutes.",
+        body: "The most useful study habit I have is a timer.\n\nDeep work has a shape. For me it is about fifty minutes of real attention, then a genuine break — stood up, away from the screen, no doomscrolling.\n\nThe timer is not there to make me work harder. It is there so I stop before I get sloppy."
+      },
+      {
+        title: "Learning in public, badly",
+        date: "19 December 2024",
+        excerpt: "Writing about something while still confused is the fastest way to stop being confused.",
+        body: "Writing about something while still confused is the fastest way to stop being confused.\n\nThe trick is to publish the confusion, not the conclusion. 'Here is where I got stuck' teaches more than 'here is the finished answer' — to you as much as to anyone reading.\n\nHalf of these notes exist so that future me can find the way back."
+      },
+      {
+        title: "Everything is a remix of something you read",
+        date: "27 November 2024",
+        excerpt: "Notes are only useful if you rewrite them in your own words. Copying is not learning; paraphrasing is.",
+        body: "Notes are only useful if you rewrite them in your own words.\n\nCopying is transcription. Paraphrasing is thinking. If I cannot say it in a sentence I made up, I have not understood it yet.\n\nSo every note of mine ends with one line beginning 'in other words'."
+      }
+    ]
+  },
+
+  home: {
+    name: "Casa Piccola",
+    emoji: "🏡",
+    desc: "Diary & memories — small things, kept",
+    accent: "#F6DE9C",
+    posts: [
+      {
+        title: "The first morning in Etriente",
+        date: "1 January 2025",
+        excerpt: "The town was drawn before it was written: one square, five doors, and a coastline that goes on further than it needs to.",
+        body: "The town was drawn before it was written.\n\nOne square, five doors, a coastline that goes on further than it needs to. I wanted somewhere it would be pleasant to be lost, even for a minute.\n\nEverything here is made of boxes and cones. Somehow it still feels like a place I have been."
+      },
+      {
+        title: "Small things worth keeping",
+        date: "16 December 2024",
+        excerpt: "A list of ordinary things: the third coffee, the cat on the wall, the laundry moving in the wind.",
+        body: "A list of ordinary things.\n\nThe third coffee. The cat on the warm wall who allows exactly one stroke. Laundry moving in the wind like it is waving. The moment the streetlights come on while the sky is still peach.\n\nNone of it is a story. All of it is the reason for the stories."
+      },
+      {
+        title: "Why I built a town instead of a blog",
+        date: "5 December 2024",
+        excerpt: "A blog is a list. A town is somewhere you choose to wander. I wanted the second one.",
+        body: "A blog is a list. A town is somewhere you choose to wander.\n\nOn a blog you read what is newest. In a town you go where you feel like going — and you might end up in the record shop when what you needed was the library.\n\nThat is the whole idea. The doors are just pages with handles."
+      }
+    ]
+  }
+};
+
+/* ==========================================================================
+   SECTION 2 — CONFIG
+   --------------------------------------------------------------------------
+   All the tunable numbers and colours for the 3D world.
+   Change a colour here and it changes everywhere that colour is used.
+   ========================================================================== */const CONFIG = {
+  colors: {
+    // The pastel palette. Soft, nothing fully saturated.
+    cream:     0xF6E7CE,
+    peach:     0xF7CBA6,
+    pink:      0xEFB6C1,
+    sage:      0xA9C6A0,
+    sky:       0xA8CEF0,
+    terra:     0xC97B5A,
+    butter:    0xF6DE9C,
+    roofTerra: 0xC2674A,   // terracotta rooftops
+    roofRose:  0xD9877F,
+    shutter:   0x5A87BE,   // "blue shutters"
+    wood:      0xB98A5E,
+    woodDark:  0x8E6842,
+    stone:     0xDCD2C0,
+    stoneDark: 0xB9AD98,
+    sand:      0xF2DFB6,
+    hillFar:   0xA8B9A6,
+    hillNear:  0xB9C9A8,
+    leafA:     0x8FB183,
+    leafB:     0xA6C48F,
+    trunk:     0x9A7757,
+    outline:   0x5B4436,   // the "ink" colour of the illustration
+    // Character
+    skin:      0xF7D9BE,
+    hair:      0x6B4A34,
+    shirt:     0xE49A82,
+    trousers:  0x6E86AE,
+    hat:       0xF2E3C6,
+    scarf:     0xE8746F,
+    // Nature
+    flowerA:   0xE88CA0,
+    flowerB:   0xF2D06B,
+    flowerC:   0xC9A0E0,
+    seaDeep:   0x4E9FC4,
+    seaShallow:0x8FD2DD,
+    // Lighting
+    sun:       0xFFE2B0,
+    ambientSky:0xCFE4FF,
+    ambientGnd:0xF3D9B4,
+    fog:       0xF6DCC2,
+    skyTop:    0x8FC3EE,
+    skyHorizon:0xF7D9B4
+  },
+
+  // Where the player starts (the middle of the square) and how big the world is.
+  spawn: { x: 0, z: 6 },
+  world: {
+    // The walkable area. Anything outside these bounds is blocked.
+    minX: -74, maxX: 74,
+    minZ: -70, maxZ: 46,     // z = 46 is the sea wall; beyond it is the beach and sea
+  },
+
+  player: {
+    radius: 0.55,            // collision circle, in metres
+    walkSpeed: 4.2,          // metres per second
+    runSpeed: 8.0,
+    turnSmoothing: 12,       // higher = snappier turning
+    accel: 14,               // how quickly speed builds up
+  },
+
+  camera: {
+    distance: 7.2,           // default distance behind the player
+    distanceMin: 4.0,
+    distanceMax: 13.0,
+    height: 3.0,             // how high above the player's feet the camera sits
+    lookAtHeight: 1.25,      // aim at roughly head height
+    damping: 6.5,            // higher = camera follows more tightly
+    minPitch: -0.25,         // radians; how far the camera may look down/up
+    maxPitch: 0.85,
+    sensitivity: 0.0055,     // mouse drag sensitivity
+  },
+
+  // One big sun for shadows. Keep shadow-casting lights to exactly one (fast).
+  shadow: {
+    size: 2048,
+    // The area the sun's shadow map covers, centred on the square.
+    extent: 70,
+    distance: 120,
+  }
+};
+
+/* ==========================================================================
+   SECTION 3 — SMALL HELPERS
+   Tiny maths and geometry utilities used all over the file.
+   ========================================================================== */
+
+// clamp(v, 0, 1) keeps a number inside a range.
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+// Linear interpolation: lerp(0, 10, 0.5) === 5. Used for all smoothing.
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// Frame-rate independent damping. Instead of "move 10% each frame" (which
+// depends on frame rate) this moves by an amount that accounts for delta time.
+const damp = (a, b, lambda, dt) => lerp(a, b, 1 - Math.exp(-lambda * dt));
+
+// Random number in a range, and a random item from an array.
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// Convert hex (0xFF0000) to the "rgb()" string canvas needs.
+const hexToCss = (hex) => '#' + hex.toString(16).padStart(6, '0');
+
+// Make a hex colour a little lighter or darker. amount: -1..1
+function shadeHex(hex, amount) {
+  const r = (hex >> 16) & 255, g = (hex >> 8) & 255, b = hex & 255;
+  const t = amount < 0 ? 0 : 255;
+  const p = Math.abs(amount);
+  const nr = Math.round(lerp(r, t, p)), ng = Math.round(lerp(g, t, p)), nb = Math.round(lerp(b, t, p));
+  return (nr << 16) | (ng << 8) | nb;
+}
+
+/**
+ * faceted(geometry)
+ * Gives a geometry a hand-carved, low-poly look.
+ *
+ * A sphere's normals normally point straight out from the centre, which makes
+ * it shade as a perfectly smooth ball. If we instead break the geometry into
+ * loose triangles and let every triangle have ONE normal for all three of its
+ * corners, each flat face catches the light slightly differently — exactly the
+ * soft, chiselled look you want for foliage and distant hills.
+ *
+ * (This is what MeshToonMaterial's missing `flatShading` flag would have done.)
+ */
+function faceted(geometry) {
+  const g = geometry.index ? geometry.toNonIndexed() : geometry;
+  g.computeVertexNormals();   // on loose triangles this yields per-face normals
+  return g;
+}
+
+/* ==========================================================================
+   SECTION 4 — PROCEDURAL CANVAS TEXTURES
+   --------------------------------------------------------------------------
+   No image files anywhere. Every texture is drawn with the 2D canvas API at
+   load time, then handed to Three.js as a CanvasTexture.
+   ========================================================================== */
+
+// A tiny cache so the same texture is only drawn once.
+const textureCache = new Map();
+
+// Helper: create a canvas of a given size and hand back its 2D context.
+function makeCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return { canvas: c, ctx: c.getContext('2d') };
+}
+
+// Helper: turn a finished canvas into a repeating Three.js texture.
+function canvasTexture(canvas, repeatX = 1, repeatY = 1) {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeatX, repeatY);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/**
+ * COBBLESTONE — irregular rounded stones with visible mortar lines.
+ * Drawn as a brick-style offset grid so the stones interlock like a real street.
+ */
+function cobbleTexture() {
+  if (textureCache.has('cobble')) return textureCache.get('cobble');
+  const S = 512;
+  const { canvas, ctx } = makeCanvas(S, S);
+
+  // Mortar / sand base colour
+  ctx.fillStyle = '#C9BCA6';
+  ctx.fillRect(0, 0, S, S);
+
+  // Stones: 6 columns x 8 rows, each row offset by half a stone.
+  const cols = 6, rows = 8;
+  const cw = S / cols, ch = S / rows;
+  const tones = ['#E4DAC6', '#DCD0BA', '#E9E0CC', '#D5C8B0', '#E0D6C1', '#CEC1A9'];
+
+  for (let row = 0; row < rows; row++) {
+    const offset = (row % 2) * (cw / 2);
+    for (let col = -1; col <= cols; col++) {
+      const cx = col * cw + offset + cw / 2;
+      const cy = row * ch + ch / 2;
+      // Each stone is a slightly squashed, slightly rotated blob.
+      const w = cw * rand(0.78, 0.9);
+      const h = ch * rand(0.7, 0.85);
+      const rot = rand(-0.18, 0.18);
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rot);
+
+      // Drop shadow under the stone gives the surface depth.
+      ctx.fillStyle = 'rgba(120,105,85,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(1.5, 2.5, w / 2, h / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // The stone itself
+      ctx.fillStyle = pick(tones);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // A lighter highlight along the top edge for a soft 3D look
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, -1, w / 2 - 2, h / 2 - 2, 0, Math.PI * 1.05, Math.PI * 1.95);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+
+  // Speckle: a few thousand tiny dots stop it looking too clean.
+  for (let i = 0; i < 2600; i++) {
+    ctx.fillStyle = `rgba(${Math.random() > 0.5 ? '90,80,65' : '255,250,240'},${rand(0.03, 0.12)})`;
+    ctx.fillRect(rand(0, S), rand(0, S), rand(1, 2.6), rand(1, 2.6));
+  }
+
+  const tex = canvasTexture(canvas);
+  textureCache.set('cobble', tex);
+  return tex;
+}
+
+/**
+ * STUCCO — the slightly uneven painted plaster wall texture.
+ * `hex` tints the plaster, so one function serves every building colour.
+ */
+function stuccoTexture(hex, grime = 0.5) {
+  const key = 'stucco' + hex + grime;
+  if (textureCache.has(key)) return textureCache.get(key);
+  const S = 256;
+  const { canvas, ctx } = makeCanvas(S, S);
+
+  const base = hexToCss(hex);
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, S, S);
+
+  // Large soft blotches = uneven hand-applied plaster.
+  for (let i = 0; i < 26; i++) {
+    const cx = rand(0, S), cy = rand(0, S), r = rand(18, 62);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    const light = Math.random() > 0.45;
+    g.addColorStop(0, light ? 'rgba(255,255,255,0.16)' : 'rgba(90,70,55,0.10)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Fine speckle for grain.
+  for (let i = 0; i < 1400; i++) {
+    ctx.fillStyle = `rgba(${Math.random() > 0.5 ? '255,255,255' : '80,65,50'},${rand(0.02, 0.08) * grime})`;
+    ctx.fillRect(rand(0, S), rand(0, S), 1.2, 1.2);
+  }
+
+  // A soft darkening at the bottom, as if rain splashes dirt up the wall.
+  const g2 = ctx.createLinearGradient(0, S * 0.7, 0, S);
+  g2.addColorStop(0, 'rgba(0,0,0,0)');
+  g2.addColorStop(1, `rgba(95,78,60,${0.14 * grime})`);
+  ctx.fillStyle = g2;
+  ctx.fillRect(0, S * 0.7, S, S * 0.3);
+
+  const tex = canvasTexture(canvas);
+  textureCache.set(key, tex);
+  return tex;
+}
+
+/** WOOD — vertical grain planks, for signs, doors, shutters, the pier. */
+function woodTexture(hex) {
+  const key = 'wood' + hex;
+  if (textureCache.has(key)) return textureCache.get(key);
+  const S = 256;
+  const { canvas, ctx } = makeCanvas(S, S);
+  ctx.fillStyle = hexToCss(hex);
+  ctx.fillRect(0, 0, S, S);
+
+  // Grain lines: wavy strokes down the canvas.
+  for (let i = 0; i < 90; i++) {
+    const x = rand(0, S);
+    ctx.strokeStyle = `rgba(${Math.random() > 0.5 ? '255,255,255' : '60,40,25'},${rand(0.03, 0.1)})`;
+    ctx.lineWidth = rand(1, 3);
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    for (let y = 0; y <= S; y += 32) ctx.lineTo(x + Math.sin((y + i) * 0.05) * 4, y);
+    ctx.stroke();
+  }
+  // Knots
+  for (let i = 0; i < 4; i++) {
+    const x = rand(20, S - 20), y = rand(20, S - 20);
+    ctx.strokeStyle = 'rgba(70,48,30,0.22)';
+    ctx.lineWidth = 2;
+    for (let r = 3; r < 12; r += 3) { ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.65, 0, 0, Math.PI * 2); ctx.stroke(); }
+  }
+  const tex = canvasTexture(canvas);
+  textureCache.set(key, tex);
+  return tex;
+}
+
+/** ROOF TILES — rows of half-round terracotta tiles (coppi). */
+function roofTexture(hex) {
+  const key = 'roof' + hex;
+  if (textureCache.has(key)) return textureCache.get(key);
+  const S = 256;
+  const { canvas, ctx } = makeCanvas(S, S);
+  ctx.fillStyle = shadeHex(hex, -0.22).toString ? hexToCss(shadeHex(hex, -0.22)) : hexToCss(hex);
+  ctx.fillRect(0, 0, S, S);
+
+  const tileW = 32, tileH = 42;
+  for (let row = 0; row * tileH < S + tileH; row++) {
+    const offset = (row % 2) * (tileW / 2);
+    for (let col = -1; col * tileW < S + tileW; col++) {
+      const x = col * tileW + offset;
+      const y = row * tileH;
+      // Each tile is a rounded ridge with a highlight down the left side.
+      const g = ctx.createLinearGradient(x, 0, x + tileW, 0);
+      g.addColorStop(0, hexToCss(shadeHex(hex, 0.12)));
+      g.addColorStop(0.45, hexToCss(hex));
+      g.addColorStop(1, hexToCss(shadeHex(hex, -0.18)));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(x + 2, y + tileH);
+      ctx.lineTo(x + 2, y + 6);
+      ctx.quadraticCurveTo(x + tileW / 2, y - 6, x + tileW - 2, y + 6);
+      ctx.lineTo(x + tileW - 2, y + tileH);
+      ctx.closePath();
+      ctx.fill();
+      // Dark line between rows
+      ctx.strokeStyle = 'rgba(70,40,25,0.3)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x, y + tileH - 1); ctx.lineTo(x + tileW, y + tileH - 1); ctx.stroke();
+    }
+  }
+  const tex = canvasTexture(canvas);
+  textureCache.set(key, tex);
+  return tex;
+}
+
+/** SAND — soft ripples for the beach. */
+function sandTexture() {
+  if (textureCache.has('sand')) return textureCache.get('sand');
+  const S = 256;
+  const { canvas, ctx } = makeCanvas(S, S);
+  ctx.fillStyle = hexToCss(CONFIG.colors.sand);
+  ctx.fillRect(0, 0, S, S);
+  for (let i = 0; i < 40; i++) {
+    ctx.strokeStyle = `rgba(255,255,255,${rand(0.03, 0.09)})`;
+    ctx.lineWidth = rand(2, 6);
+    ctx.beginPath();
+    const y = rand(0, S);
+    ctx.moveTo(0, y);
+    for (let x = 0; x <= S; x += 24) ctx.lineTo(x, y + Math.sin(x * 0.05 + i) * 5);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 3000; i++) {
+    ctx.fillStyle = `rgba(${Math.random() > 0.5 ? '255,255,255' : '170,145,100'},${rand(0.05, 0.18)})`;
+    ctx.fillRect(rand(0, S), rand(0, S), 1.4, 1.4);
+  }
+  const tex = canvasTexture(canvas);
+  textureCache.set('sand', tex);
+  return tex;
+}
+
+/**
+ * TEXT SIGN — draws words onto a canvas so they can hang on a building.
+ * Returns a CanvasTexture with transparent background, plus the aspect ratio
+ * so the caller can size the plane correctly.
+ */
+function signTexture(lines, opts = {}) {
+  const {
+    width = 512,
+    font = '600 58px Caveat, cursive',
+    subFont = '500 30px Quicksand, sans-serif',
+    color = '#4A3B31',
+    subColor = '#8E6A52',
+    bg = 'rgba(255,252,245,0.97)',
+    border = 'rgba(201,123,90,0.55)',
+    padding = 26,
+    sub = null,
+  } = opts;
+
+  const { canvas, ctx } = makeCanvas(width, 260);
+  const cx = width / 2;
+
+  // Rounded rectangle background
+  const r = 20;
+  ctx.fillStyle = bg;
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(r, 4);
+  ctx.arcTo(width - 4, 4, width - 4, 256, r);
+  ctx.arcTo(width - 4, 256, 4, 256, r);
+  ctx.arcTo(4, 256, 4, 4, r);
+  ctx.arcTo(4, 4, width - 4, 4, r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Main line(s). Each array item on its own line.
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = color;
+  ctx.font = font;
+  const list = Array.isArray(lines) ? lines : [lines];
+  const totalH = list.length * 62;
+  let y = 130 - totalH / 2 + 34;
+  for (const line of list) {
+    ctx.fillText(line, cx, y);
+    y += 62;
+  }
+
+  // Small subtitle underneath, e.g. "reading & writing"
+  if (sub) {
+    ctx.font = subFont;
+    ctx.fillStyle = subColor;
+    ctx.fillText(sub, cx, y + 4);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return { tex, aspect: canvas.width / canvas.height };
+}
+
+/**
+ * MAP BOARD ART — the illustrated tourist map printed on the board in the
+ * square. This is drawn top-down from the same coordinates the world uses.
+ */
+function mapBoardTexture() {
+  const W = 640, H = 470;
+  const { canvas, ctx } = makeCanvas(W, H);
+
+  // Parchment background
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, '#FDF6E6');
+  g.addColorStop(1, '#F3E4C8');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // A frame
+  ctx.strokeStyle = '#C97B5A';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(4, 4, W - 8, H - 8);
+
+  // Title
+  ctx.fillStyle = '#A9603F';
+  ctx.font = '700 46px Caveat, cursive';
+  ctx.textAlign = 'center';
+  ctx.fillText('ETRIENTE', W / 2, 60);
+  ctx.font = '600 20px Quicksand, sans-serif';
+  ctx.fillStyle = '#9A7A62';
+  ctx.fillText('mappa della città', W / 2, 88);
+
+  // The sea at the bottom
+  ctx.fillStyle = '#BEE3EE';
+  ctx.fillRect(10, H - 120, W - 20, 110);
+  ctx.fillStyle = '#8FCBDD';
+  for (let i = 0; i < 22; i++) {
+    ctx.beginPath();
+    ctx.ellipse(rand(20, W - 20), rand(H - 112, H - 20), rand(12, 34), rand(3, 6), 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Sand
+  ctx.fillStyle = '#F2DFB6';
+  ctx.fillRect(10, H - 160, W - 20, 44);
+
+  // Cobbled plaza
+  ctx.fillStyle = '#E2D6C0';
+  ctx.beginPath();
+  ctx.arc(W / 2, H / 2 - 20, 92, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#CBBBA0';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // The five blog buildings as little coloured houses around the plaza
+  const pins = [
+    { x: 0, z: 24,  c: '#C97B5A', n: '1' },
+    { x: -30, z: 16, c: '#EFB6C1', n: '2' },
+    { x: 30, z: 16,  c: '#A9C6A0', n: '3' },
+    { x: -34, z: -16, c: '#A8CEF0', n: '4' },
+    { x: 34, z: -16, c: '#F6DE9C', n: '5' },
+  ];
+  // World (-74..74 x, -70..46 z) mapped into the board's drawing area.
+  const toBoard = (x, z) => ({
+    bx: 40 + ((x + 78) / 156) * (W - 80),
+    by: 110 + ((z + 74) / 124) * (H - 250),
+  });
+
+  for (const p of pins) {
+    const { bx, by } = toBoard(p.x, p.z);
+    // House shape
+    ctx.fillStyle = p.c;
+    ctx.beginPath();
+    ctx.rect(bx - 15, by - 8, 30, 24);
+    ctx.fill();
+    ctx.fillStyle = '#B85C42';
+    ctx.beginPath();
+    ctx.moveTo(bx - 20, by - 8);
+    ctx.lineTo(bx, by - 26);
+    ctx.lineTo(bx + 20, by - 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = '700 15px Quicksand, sans-serif';
+    ctx.fillText(p.n, bx, by + 8);
+  }
+
+  // "You are here" star in the plaza
+  const here = toBoard(0, 6);
+  ctx.fillStyle = '#D9453C';
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const ang = (Math.PI / 5) * i - Math.PI / 2;
+    const r = i % 2 === 0 ? 13 : 5.5;
+    ctx.lineTo(here.bx + Math.cos(ang) * r, here.by + Math.sin(ang) * r);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return { tex, aspect: W / H };
+}
+
+/* ==========================================================================
+   SECTION 5 — THE TOON LOOK
+   --------------------------------------------------------------------------
+   Two tricks make everything look hand-drawn:
+
+   (a) A "gradient map": a tiny 1D texture with a few flat bands of light.
+       MeshToonMaterial samples it, so instead of a smooth, plasticky shade
+       you get two or three crisp steps — the classic cartoon look.
+
+   (b) An outline: we copy every mesh, turn the copy inside out (we see only
+       its back faces) and make it slightly bigger. It appears as a dark line
+       hugging the silhouette. This is the "inverted hull" method.
+   ========================================================================== */
+
+// --- (a) the gradient map -------------------------------------------------
+let TOON_GRADIENT = null;   // built by initToonLook() once Three.js has loaded
+
+/**
+ * Make the little 1D "light ramp" that MeshToonMaterial samples.
+ * Four flat brightness steps instead of a smooth curve — that is what gives
+ * the crisp cartoon bands rather than a plastic-looking gradient.
+ */
+function makeToonGradient(steps = 4) {
+  const data = new Uint8Array(steps);
+  // Each entry is a brightness level. The last one is full light.
+  const levels = [110, 175, 225, 255];
+  for (let i = 0; i < steps; i++) data[i] = levels[Math.min(i, levels.length - 1)];
+  const tex = new THREE.DataTexture(data, steps, 1, THREE.RedFormat);
+  tex.minFilter = THREE.NearestFilter;   // Nearest = hard steps, no blurring
+  tex.magFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Called once, right after Three.js arrives. We cannot build the gradient map
+ * at the top of the file because at that moment `THREE` is still null — the
+ * library is fetched asynchronously so that the loading screen can appear.
+ */
+function initToonLook() {
+  TOON_GRADIENT = makeToonGradient(4);
+  OUTLINE_MATERIAL = new THREE.MeshBasicMaterial({
+    color: OUTLINE_COLOR,
+    side: THREE.BackSide,          // only the inside of the shell is visible
+    fog: true,                     // outlines fade into the haze too
+  });
+}
+
+// --- Material factory ----------------------------------------------------
+// Making a material by hand every time is noisy; this keeps it tidy and
+// caches them so we do not create hundreds of duplicates.
+const materialCache = new Map();
+
+/**
+ * toon(color, options)
+ *   color   hex number
+ *   options.map        a texture (optional)
+ *   options.emissive   glow amount 0..1 (optional)
+ *   options.side       THREE.FrontSide (default) / DoubleSide
+ *   options.transparent / opacity   for anything see-through
+ *
+ * NOTE ON "FLAT SHADING": MeshToonMaterial does not support the `flatShading`
+ * flag (Three.js warns and ignores it). If you want a faceted, low-poly look
+ * on a particular shape, the reliable way is to give that geometry per-face
+ * normals — see faceted() in SECTION 9, which is applied to the trees.
+ */
+function toon(color, options = {}) {
+  const { map = null, emissive = 0, side = THREE.FrontSide, transparent = false, opacity = 1 } = options;
+  const key = `${color}|${map ? map.uuid : 'x'}|${emissive}|${side}|${transparent}|${opacity}`;
+  if (materialCache.has(key)) return materialCache.get(key);
+  const mat = new THREE.MeshToonMaterial({
+    color,
+    gradientMap: TOON_GRADIENT,
+    map,
+    side,
+    transparent,
+    opacity,
+    emissive: emissive > 0 ? color : 0x000000,
+    emissiveIntensity: emissive,
+  });
+  materialCache.set(key, mat);
+  return mat;
+}
+
+// --- (b) the outline pass ------------------------------------------------
+// One shared material for every outline shell in the whole town: dark ink
+// colour, and only its BACK faces are drawn. Created by initToonLook().
+const OUTLINE_COLOR = CONFIG.colors.outline;
+let OUTLINE_MATERIAL = null;
+
+/**
+ * addOutline(object3d, thickness, skip)
+ * Walks every mesh inside `object3d` and adds an inverted-hull shell to it.
+ * The shell is a CHILD of the original mesh, so it inherits all animation
+ * and rotation automatically — the outline always hugs the moving shape.
+ *
+ *   thickness  how far the shell is pushed out, in world units.
+ *              ~0.012 for maths that matter, but because the shell is a
+ *              child it also scales with the parent, so keep it small.
+ *   skip       an array of materials to skip (used to avoid outlining things
+ *              that are already dark or that would look wrong with a line).
+ */
+function addOutline(object3d, thickness = 0.035) {
+  const meshes = [];
+  object3d.traverse((o) => { if (o.isMesh) meshes.push(o); });
+
+  for (const mesh of meshes) {
+    // Allow a mesh to opt out with mesh.userData.noOutline = true
+    if (mesh.userData.noOutline) continue;
+
+    let geo = mesh.geometry;
+    // The shell must be pushed out along each face's own normal. That only
+    // works cleanly if the geometry is non-indexed (each triangle separate),
+    // so we convert once and remember it.
+    if (!geo.userData.__outlineReady) {
+      const nonIndexed = geo.index ? geo.toNonIndexed() : geo;
+      if (!nonIndexed.attributes.normal) nonIndexed.computeVertexNormals();
+      nonIndexed.userData.__outlineReady = true;
+      geo = nonIndexed;
+      mesh.geometry = geo;    // the visible mesh uses it too
+    }
+
+    const shell = new THREE.Mesh(geo, OUTLINE_MATERIAL);
+    shell.scale.multiplyScalar(1 + thickness);   // push along own normals
+    shell.castShadow = false;
+    shell.receiveShadow = false;
+    shell.renderOrder = -1;
+    mesh.add(shell);
+  }
+}
+
+/* ==========================================================================
+   SECTION 6 — SCENE, RENDERER, CAMERA, LIGHTS, SKY, SEA
+   ========================================================================== */
+
+let renderer, scene, camera, sunLight;
+
+function initRenderer() {
+  const canvas = document.getElementById('scene');
+  renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: true,
+    powerPreference: 'high-performance',
+  });
+  // Cap the pixel ratio at 2: crisper than 1, but never the 3-4x that makes
+  // laptops and phones crawl.
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;    // soft shadow edges
+
+  // Golden-hour grading. ACES tonemapping keeps the bright pastels from
+  // clipping to flat white, which is what makes it feel like warm light.
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.12;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  window.addEventListener('resize', onWindowResize);
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function initScene() {
+  scene = new THREE.Scene();
+  // Light fog: the further away something is, the more it fades into the
+  // warm haze. This is the single biggest "storybook distance" trick.
+  scene.fog = new THREE.Fog(CONFIG.colors.fog, 55, 250);
+}
+
+function initCamera() {
+  camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 900);
+  camera.position.set(0, 6, 16);
+}
+
+function initLights() {
+  // --- The sun: the ONE shadow-casting light, for performance -----------
+  sunLight = new THREE.DirectionalLight(CONFIG.colors.sun, 2.5);
+  // A low, warm sun: golden hour comes from the angle, not just the colour.
+  sunLight.position.set(-60, 62, -48);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(CONFIG.shadow.size, CONFIG.shadow.size);
+  // Orthographic shadow camera tight around the town = sharper shadows.
+  const e = CONFIG.shadow.extent, d = CONFIG.shadow.distance;
+  sunLight.shadow.camera.left = -e;
+  sunLight.shadow.camera.right = e;
+  sunLight.shadow.camera.top = e;
+  sunLight.shadow.camera.bottom = -e;
+  sunLight.shadow.camera.near = 1;
+  sunLight.shadow.camera.far = d * 2;
+  sunLight.shadow.bias = -0.0009;
+  sunLight.shadow.normalBias = 0.035;   // stops "shadow acne" stripes
+  scene.add(sunLight);
+  scene.add(sunLight.target);
+  sunLight.target.position.set(0, 0, -6);
+
+  // --- Hemisphere light: sky from above, warm ground bounce from below ---
+  const hemi = new THREE.HemisphereLight(CONFIG.colors.ambientSky, CONFIG.colors.ambientGnd, 1.15);
+  scene.add(hemi);
+
+  // --- A very soft fill from the opposite side so nothing is pitch black -
+  const fill = new THREE.DirectionalLight(0xFFD9C0, 0.35);
+  fill.position.set(48, 26, 40);
+  scene.add(fill);
+}
+
+/**
+ * SKY — a huge sphere seen from the inside, painted with a two-colour
+ * vertical gradient. A handful of lines of GLSL beats any texture file.
+ */
+function buildSky() {
+  const uniforms = {
+    topColor:     { value: new THREE.Color(CONFIG.colors.skyTop) },
+    horizonColor: { value: new THREE.Color(CONFIG.colors.skyHorizon) },
+    bottomColor:  { value: new THREE.Color(0xF3C9A6) },
+  };
+
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(600, 32, 20),
+    new THREE.ShaderMaterial({
+      uniforms,
+      side: THREE.BackSide,     // we are inside it
+      depthWrite: false,        // never hides anything
+      fog: false,
+      vertexShader: /* glsl */`
+        varying float vH;
+        void main() {
+          // Pass the vertical position (-1 bottom .. +1 top) to the fragment stage
+          vH = normalize(position).y;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */`
+        uniform vec3 topColor;
+        uniform vec3 horizonColor;
+        uniform vec3 bottomColor;
+        varying float vH;
+        void main() {
+          // Smoothstep gives a soft band instead of a hard line
+          vec3 c = mix(horizonColor, topColor, smoothstep(0.0, 0.62, vH));
+          c = mix(bottomColor, c, smoothstep(-0.28, 0.02, vH));
+          gl_FragColor = vec4(c, 1.0);
+        }
+      `,
+    })
+  );
+  sky.renderOrder = -1000;
+  scene.add(sky);
+
+  // --- A few soft storybook clouds: flattened spheres, no shading --------
+  const cloudMat = new THREE.MeshBasicMaterial({
+    color: 0xFFF6E8, transparent: true, opacity: 0.85, fog: false, depthWrite: false,
+  });
+  for (let i = 0; i < 14; i++) {
+    const puff = new THREE.Group();
+    const parts = 3 + Math.floor(Math.random() * 3);
+    for (let p = 0; p < parts; p++) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(rand(5, 11), 10, 8), cloudMat);
+      m.position.set(rand(-14, 14), rand(-2, 2), rand(-6, 6));
+      m.scale.set(1, rand(0.5, 0.7), 1);
+      puff.add(m);
+    }
+    const ang = rand(0, Math.PI * 2), dist = rand(120, 300);
+    puff.position.set(Math.cos(ang) * dist, rand(70, 120), Math.sin(ang) * dist);
+    puff.userData.drift = rand(0.2, 0.6);
+    scene.add(puff);
+    clouds.push(puff);
+  }
+}
+const clouds = [];
+
+/**
+ * SEA — a big plane with a custom shader. The vertex shader moves the
+ * surface up and down in gentle sine waves; the fragment shader fakes
+ * moving highlights so it glitters like late-afternoon water.
+ */
+let waterUniforms = null;
+function buildSea() {
+  // Three.js keeps its fog settings in `UniformsLib.fog`. By MIXING those
+  // definitions into our shader's uniforms we get the standard names
+  // (fogColor, fogNear, fogFar) and — importantly — Three.js can keep them
+  // up to date for us. Then `fog: true` below works correctly.
+  //
+  // (Setting `fog: true` WITHOUT merging these in is a classic crash: the
+  // renderer tries to refresh uniforms that do not exist.)
+  waterUniforms = Object.assign(
+    THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
+    {
+      uTime:      { value: 0 },
+      uDeep:      { value: new THREE.Color(CONFIG.colors.seaDeep) },
+      uShallow:   { value: new THREE.Color(CONFIG.colors.seaShallow) },
+      uSunDir:    { value: new THREE.Vector3(-0.6, 0.55, -0.48).normalize() },
+    },
+  );
+
+  // Match the scene's fog settings so the far water melts into the haze.
+  waterUniforms.fogColor.value = new THREE.Color(CONFIG.colors.fog);
+  waterUniforms.fogNear.value = 55.0;
+  waterUniforms.fogFar.value = 250.0;
+
+  const sea = new THREE.Mesh(
+    new THREE.PlaneGeometry(900, 620, 120, 80),
+    new THREE.ShaderMaterial({
+      uniforms: waterUniforms,
+      fog: true,   // let Three inject fog uniforms so we can fade it ourselves
+      vertexShader: /* glsl */`
+        uniform float uTime;
+        varying vec2 vUv;
+        varying vec3 vWorld;
+        varying float vWave;
+
+        // Two crossed sine waves make a convincing gentle swell.
+        float wave(vec2 p, float t) {
+          float a = sin(p.x * 0.10 + t * 0.75) * 0.55;
+          float b = sin(p.y * 0.14 - t * 0.62) * 0.38;
+          float c = sin((p.x + p.y) * 0.06 + t * 0.45) * 0.30;
+          return a + b + c;
+        }
+
+        void main() {
+          vUv = uv;
+          vec3 pos = position;
+          // The plane is rotated flat, so local x/y are the world's x/z.
+          float h = wave(pos.xy, uTime);
+          pos.z += h;                     // displace along the plane's normal
+          vWave = h;
+          vec4 world = modelMatrix * vec4(pos, 1.0);
+          vWorld = world.xyz;
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
+      `,
+      fragmentShader: /* glsl */`
+        uniform float uTime;
+        uniform vec3 uDeep;
+        uniform vec3 uShallow;
+        uniform vec3 uSunDir;
+        // Supplied by Three.js itself, because we merged UniformsLib.fog in.
+        uniform vec3 fogColor;
+        uniform float fogNear;
+        uniform float fogFar;
+        varying vec2 vUv;
+        varying vec3 vWorld;
+        varying float vWave;
+
+        // A cheap pseudo-random for the sparkle
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        // Smooth value noise, used to wobble the wave lines
+        float noise(vec2 p) {
+          vec2 i = floor(p), f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash(i), hash(i + vec2(1,0)), f.x),
+                     mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), f.x), f.y);
+        }
+
+        void main() {
+          vec2 p = vWorld.xz;
+
+          // Stylised wave lines: thin bands that travel toward the shore.
+          float n = noise(p * 0.06 + vec2(0.0, uTime * 0.10)) * 6.0;
+          float bands = sin(p.y * 0.55 + n + uTime * 1.4);
+          float crest = smoothstep(0.72, 1.0, bands) * 0.55;
+          float crest2 = smoothstep(0.90, 1.0, sin(p.x * 0.4 - uTime * 0.9 + n)) * 0.35;
+
+          // Base colour: shallower (lighter, greener) closer to the beach.
+          float depth = clamp((40.0 - vWorld.z) / 260.0, 0.0, 1.0);
+          vec3 col = mix(uShallow, uDeep, depth);
+
+          // Add the wave crests on top
+          col = mix(col, vec3(1.0, 0.99, 0.94), crest + crest2);
+
+          // A pale sandbar glow right at the shoreline
+          col = mix(col, vec3(0.95, 0.93, 0.80), smoothstep(46.0, 58.0, vWorld.z) * 0.55);
+
+          // Sun glitter: sparse, twinkling, only where the sun direction
+          // roughly lines up. Gives that golden-hour sparkle.
+          vec2 g = floor(p * 1.6);
+          float sp = hash(g);
+          float twinkle = smoothstep(0.985, 1.0, sp) * (0.5 + 0.5 * sin(uTime * 3.0 + sp * 40.0));
+          float facing = clamp(dot(normalize(vec3(0.0, 1.0, 0.0)), uSunDir) + 0.4, 0.0, 1.0);
+          col += vec3(1.0, 0.93, 0.78) * twinkle * facing * 2.4;
+
+          // Gentle vertical gradient so the horizon melts into the sky
+          col = mix(col, fogColor, smoothstep(150.0, 420.0, length(vWorld.xz)) * 0.5);
+
+          // Distance fog. Three.js does not apply its fog chunks to a raw
+          // shader automatically, so we do the same maths ourselves using the
+          // fog uniforms it keeps up to date for us.
+          float d = length(vWorld - cameraPosition);
+          float f = smoothstep(fogNear, fogFar, d);
+          col = mix(col, fogColor, f * 0.85);
+
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+    })
+  );
+
+  // Lay the plane flat, just below the beach level.
+  sea.rotation.x = -Math.PI / 2;
+  sea.position.set(0, -0.35, 285);
+  sea.receiveShadow = false;
+  scene.add(sea);
+}
+
+/* ==========================================================================
+   SECTION 7 — THE TOWN
+   --------------------------------------------------------------------------
+   Every builder function below adds meshes to the scene. They are listed in
+   the order they are called at the bottom of this file.
+
+   COORDINATES: x runs left/right, z runs north(-)/south(+), y is up.
+   The square is at (0,0). The sea is at large positive z.
+   ========================================================================== */
+
+// A registry of solid things the player cannot walk through.
+// Each entry is an axis-aligned box: {minX, maxX, minZ, maxZ}
+const colliders = [];
+
+// Things the player can interact with:
+// { x, z, radius, label, action }
+const interactables = [];
+
+// Named places, used by the map, the minimap and the "where am I" card.
+const places = [];
+
+/** Register a box the player cannot walk into. */
+function addCollider(cx, cz, halfX, halfZ) {
+  colliders.push({ minX: cx - halfX, maxX: cx + halfX, minZ: cz - halfZ, maxZ: cz + halfZ });
+}
+
+/** Register an interactable spot. */
+function addInteractable(x, z, radius, label, action, kind = 'enter') {
+  interactables.push({ x, z, radius, label, action, kind });
+}
+
+/** Register a named place for the map and HUD. */
+function addPlace(name, note, x, z, color) {
+  places.push({ name, note, x, z, color });
+}
+
+// --------------------------------------------------------------------------
+// GROUND: grass, cobbles, plaza, promenade, paths
+// --------------------------------------------------------------------------
+function buildGround() {
+  // --- The base terrain: a big soft-green plane -------------------------
+  const grassGeo = new THREE.PlaneGeometry(240, 240, 1, 1);
+  const grass = new THREE.Mesh(grassGeo, toon(0xB7CBA4));
+  grass.rotation.x = -Math.PI / 2;
+  grass.position.set(0, 0, -30);
+  grass.receiveShadow = true;
+  scene.add(grass);
+
+  // --- Cobbled streets ---------------------------------------------------
+  // One long strip running from the square down to the beach, plus the
+  // square itself and two cross streets. Drawn as separate planes so the
+  // cobble texture can be tiled at different scales.
+  const cobble = cobbleTexture();
+
+  const addStreet = (w, d, x, z, repX, repY) => {
+    const tex = cobble.clone();
+    tex.needsUpdate = true;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(repX, repY);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), toon(0xFFFFFF, { map: tex }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, 0.02, z);
+    m.receiveShadow = true;
+    scene.add(m);
+    return m;
+  };
+
+  // Main avenue: square -> sea (the "you can see the sea from here" view)
+  addStreet(16, 40, 0, 24, 4, 10);
+  // Cross street east-west through the square
+  addStreet(56, 12, 0, 0, 14, 3);
+  // Streets out to the west and east buildings
+  addStreet(12, 46, -30, 8, 3, 11);
+  addStreet(12, 46, 30, 8, 3, 11);
+  // A back lane behind the square, for the quiet alley
+  addStreet(70, 8, -4, -34, 17, 2);
+
+  // --- The piazza: a circle of slightly warmer stone ---------------------
+  const plazaTex = cobble.clone();
+  plazaTex.needsUpdate = true;
+  plazaTex.wrapS = plazaTex.wrapT = THREE.RepeatWrapping;
+  plazaTex.repeat.set(7, 7);
+  const plaza = new THREE.Mesh(
+    new THREE.CircleGeometry(21, 48),
+    toon(0xF0E2C8, { map: plazaTex })
+  );
+  plaza.rotation.x = -Math.PI / 2;
+  plaza.position.set(0, 0.04, 0);
+  plaza.receiveShadow = true;
+  scene.add(plaza);
+
+  // A ring of pale stone marking the edge of the piazza
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(20.6, 21.8, 64),
+    toon(CONFIG.colors.stone)
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(0, 0.05, 0);
+  ring.receiveShadow = true;
+  scene.add(ring);
+
+  // --- Grass patches around the edges, for gardens ----------------------
+  const patch = (x, z, r) => {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(r, 24), toon(0xAFC79B));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, 0.03, z);
+    m.receiveShadow = true;
+    scene.add(m);
+  };
+  patch(-50, -20, 14);
+  patch(52, -22, 13);
+  patch(-46, 24, 11);
+  patch(48, 26, 12);
+  patch(-12, -52, 16);
+  patch(16, -50, 13);
+}
+
+// --------------------------------------------------------------------------
+// THE SEA WALL AND THE BEACH
+// --------------------------------------------------------------------------
+function buildSeafront() {
+  const wallMat = toon(CONFIG.colors.stone);
+  const railMat = toon(CONFIG.colors.woodDark);
+
+  // A low wall along z = 46 with a gap in the middle for the steps down.
+  const gapHalf = 7;
+  const segments = [
+    { x: -40, w: 52 },   // from x=-66 to x=-14
+    { x: 40, w: 52 },    // from x=14 to x=66
+  ];
+  for (const s of segments) {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(s.w, 1.1, 1.2), wallMat);
+    wall.position.set(s.x, 0.55, 46);
+    wall.castShadow = true; wall.receiveShadow = true;
+    scene.add(wall);
+    addCollider(s.x, 46, s.w / 2, 0.7);
+
+    // A lighter capstone on top
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(s.w + 0.2, 0.18, 1.5), toon(0xEDE3D2));
+    cap.position.set(s.x, 1.18, 46);
+    cap.castShadow = true; cap.receiveShadow = true;
+    scene.add(cap);
+  }
+
+  // Steps down to the sand in the gap, so the beach is reachable.
+  for (let i = 0; i < 4; i++) {
+    const step = new THREE.Mesh(new THREE.BoxGeometry(gapHalf * 2, 0.28, 1.3), toon(0xE7DCC6));
+    step.position.set(0, 0.9 - i * 0.28, 46.4 + i * 1.25);
+    step.receiveShadow = true; step.castShadow = true;
+    scene.add(step);
+  }
+
+  // --- Sand below the wall ----------------------------------------------
+  const sandTex = sandTexture();
+  sandTex.repeat.set(14, 6);
+  const sand = new THREE.Mesh(
+    new THREE.PlaneGeometry(150, 42),
+    toon(0xF4E3BC, { map: sandTex })
+  );
+  sand.rotation.x = -Math.PI / 2;
+  sand.position.set(0, -0.02, 66);
+  sand.receiveShadow = true;
+  scene.add(sand);
+
+  // A soft dune ridge where sand meets grass
+  const dune = new THREE.Mesh(new THREE.BoxGeometry(150, 0.5, 6), toon(0xEBD8AE));
+  dune.position.set(0, 0.1, 47.5);
+  dune.receiveShadow = true;
+  scene.add(dune);
+
+  // --- The promenade: a pale strip inside the wall ------------------------
+  const prom = new THREE.Mesh(new THREE.BoxGeometry(134, 0.16, 6), toon(0xE8DCC4));
+  prom.position.set(0, 0.06, 42.6);
+  prom.receiveShadow = true;
+  scene.add(prom);
+
+  // --- Stone posts along the wall, repeated but few ----------------------
+  for (let x = -62; x <= 62; x += 8) {
+    if (Math.abs(x) < 9) continue;   // leave the steps clear
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 1.5, 8), toon(0xDCCFB8));
+    post.position.set(x, 1.85, 46);
+    post.castShadow = true;
+    scene.add(post);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), toon(0xE9DECA));
+    ball.position.set(x, 2.7, 46);
+    ball.castShadow = true;
+    scene.add(ball);
+  }
+
+  addPlace('Lungomare', 'The seafront walk. Steps down to the sand in the middle.', 0, 43, '#A8CEF0');
+  addPlace('Spiaggia', 'The beach. Sunbed, umbrellas and shallow water.', 0, 62, '#F2DFB6');
+}
+
+// --------------------------------------------------------------------------
+// THE FOUNTAIN in the middle of the piazza
+// --------------------------------------------------------------------------
+let fountainWater = null;
+function buildFountain(cx = 0, cz = 0) {
+  const g = new THREE.Group();
+  g.position.set(cx, 0, cz);
+
+  // Octagonal basin
+  const basin = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.4, 0.9, 8), toon(0xE8DCC4));
+  basin.position.y = 0.45; basin.castShadow = true; basin.receiveShadow = true;
+  g.add(basin);
+
+  // Inner rim (a slightly smaller, darker ring)
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(2.9, 2.9, 0.22, 8), toon(0xCDBFA6));
+  rim.position.y = 0.95;
+  g.add(rim);
+
+  // Water surface — a flat translucent disc that we gently bob in the loop.
+  fountainWater = new THREE.Mesh(
+    new THREE.CircleGeometry(2.75, 24),
+    new THREE.MeshToonMaterial({
+      color: 0x9FD8E0, transparent: true, opacity: 0.82,
+      gradientMap: TOON_GRADIENT,
+    })
+  );
+  fountainWater.rotation.x = -Math.PI / 2;
+  fountainWater.position.y = 1.0;
+  fountainWater.userData.noOutline = true;
+  g.add(fountainWater);
+
+  // Central pillar with two tiers
+  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.62, 2.2, 10), toon(0xE4D6BC));
+  pillar.position.y = 2.1; pillar.castShadow = true;
+  g.add(pillar);
+
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 0.5, 0.5, 12), toon(0xE9DCC4));
+  bowl.position.y = 3.25; bowl.castShadow = true;
+  g.add(bowl);
+
+  const stem2 = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 1.1, 8), toon(0xE4D6BC));
+  stem2.position.y = 3.95; stem2.castShadow = true;
+  g.add(stem2);
+
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), toon(0xEDE2CC));
+  top.position.y = 4.6; top.castShadow = true;
+  g.add(top);
+
+  scene.add(g);
+  addOutline(g, 0.02);
+
+  // You cannot walk through the fountain.
+  addCollider(cx, cz, 3.6, 3.6);
+  addPlace('Fontana', 'The fountain in the piazza. A good place to sit and think.', cx, cz, '#9FD8E0');
+}
+
+// --------------------------------------------------------------------------
+// THE TOURIST MAP BOARD — the thing that opens the 2D map
+// --------------------------------------------------------------------------
+function buildMapBoard(cx = 0, cz = -15) {
+  const g = new THREE.Group();
+  g.position.set(cx, 0, cz);
+  g.rotation.y = 0;   // faces south, towards the square
+
+  // Two posts
+  for (const x of [-1.6, 1.6]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 3.4, 8), toon(CONFIG.colors.woodDark));
+    post.position.set(x, 1.7, 0);
+    post.castShadow = true;
+    g.add(post);
+  }
+
+  // The board: a box, with the illustrated map on its front face.
+  const { tex, aspect } = mapBoardTexture();
+  const boardW = 4.4, boardH = boardW / aspect;
+
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(boardW + 0.3, boardH + 0.3, 0.22), toon(CONFIG.colors.wood));
+  frame.position.set(0, 3.0, 0);
+  frame.castShadow = true; frame.receiveShadow = true;
+  g.add(frame);
+
+  const face = new THREE.Mesh(
+    new THREE.PlaneGeometry(boardW, boardH),
+    new THREE.MeshToonMaterial({ map: tex, gradientMap: TOON_GRADIENT })
+  );
+  face.position.set(0, 3.0, 0.125);   // just in front of the frame
+  g.add(face);
+
+  // A little arched roof over the board to keep the illustration "dry"
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(boardW + 0.7, 0.14, 0.6), toon(CONFIG.colors.roofTerra));
+  roof.position.set(0, 3.0 + boardH / 2 + 0.3, 0.05);
+  roof.rotation.x = -0.12;
+  roof.castShadow = true;
+  g.add(roof);
+
+  scene.add(g);
+  addOutline(g, 0.02);
+
+  // Solid: you bump into the board.
+  addCollider(cx, cz, 2.4, 0.7);
+
+  // Interactable: opens the town map.
+  addInteractable(cx, cz + 1.6, 3.6, 'Read the town map', () => openOverlay('ov-map'), 'map');
+  addPlace('Mappa della città', 'The big map board showing all of Etriente.', cx, cz, '#C97B5A');
+}
+
+/* --------------------------------------------------------------------------
+   A REUSABLE BUILDING
+   --------------------------------------------------------------------------
+   Every blog building is made by this one function, then decorated
+   differently. That keeps the geometry consistent (and cheap) while the
+   colours, size and props make each one unique.
+   -------------------------------------------------------------------------- */
+function buildBuilding(opts) {
+  const {
+    x, z,
+    rotationY = 0,
+    width = 12, depth = 10, height = 8,
+    wallColor, roofColor,
+    shutterColor = CONFIG.colors.shutter,
+    signText, signSub, signAccent,
+    roofStyle = 'gable',      // 'gable' | 'flat' | 'dome'
+    floors = 2,
+    balcony = false,
+    awning = false,
+    lantern = false,
+    veranda = false,
+  } = opts;
+
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  g.rotation.y = rotationY;
+
+  const wallTex = stuccoTexture(wallColor);
+  wallTex.repeat.set(Math.max(1, width / 5), Math.max(1, height / 5));
+
+  // --- Walls -------------------------------------------------------------
+  const walls = new THREE.Mesh(
+    new THREE.BoxGeometry(width, height, depth),
+    toon(wallColor, { map: wallTex })
+  );
+  walls.position.y = height / 2;
+  walls.castShadow = true;
+  walls.receiveShadow = true;
+  g.add(walls);
+
+  // A stone base course so the building looks anchored to the ground
+  const base = new THREE.Mesh(new THREE.BoxGeometry(width + 0.4, 0.8, depth + 0.4), toon(0xCFC0A8));
+  base.position.y = 0.4;
+  base.castShadow = true; base.receiveShadow = true;
+  g.add(base);
+
+  // --- Roof --------------------------------------------------------------
+  const roofTex = roofTexture(roofColor);
+  roofTex.repeat.set(width / 3, depth / 3);
+  const roofMat = toon(roofColor, { map: roofTex });
+
+  if (roofStyle === 'gable') {
+    // A gable roof is a triangular prism. We build it from an extruded
+    // triangle: two sloped faces, which is exactly what a roof is.
+    const shape = new THREE.Shape();
+    const halfW = width / 2 + 0.7;
+    shape.moveTo(-halfW, 0);
+    shape.lineTo(halfW, 0);
+    shape.lineTo(0, 2.6);
+    shape.closePath();
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: depth + 1.0, bevelEnabled: false });
+    geo.translate(0, 0, -(depth + 1.0) / 2);
+    const roof = new THREE.Mesh(geo, roofMat);
+    roof.position.y = height;
+    roof.castShadow = true; roof.receiveShadow = true;
+    g.add(roof);
+
+    // Decorative barge boards along the front edge
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(width + 1.5, 0.22, 0.3), toon(shadeHex(wallColor, -0.35)));
+    trim.position.set(0, height + 0.02, (depth + 1.0) / 2);
+    g.add(trim);
+  } else if (roofStyle === 'flat') {
+    // A flat roof with a parapet wall and a little roof terrace.
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(width + 0.6, 0.4, depth + 0.6), toon(roofColor));
+    slab.position.y = height + 0.2;
+    slab.castShadow = true; slab.receiveShadow = true;
+    g.add(slab);
+
+    // Parapet around three sides so you can see the terrace
+    const pMat = toon(shadeHex(wallColor, 0.1));
+    const front = new THREE.Mesh(new THREE.BoxGeometry(width + 0.6, 0.8, 0.35), pMat);
+    front.position.set(0, height + 0.75, (depth + 0.6) / 2);
+    front.castShadow = true;
+    g.add(front);
+    for (const sx of [-1, 1]) {
+      const side = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.8, depth + 0.6), pMat);
+      side.position.set(sx * (width + 0.6) / 2, height + 0.75, 0);
+      side.castShadow = true;
+      g.add(side);
+    }
+  } else if (roofStyle === 'dome') {
+    // A rounded dome, for the library.
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(width / 2 + 0.4, width / 2 + 0.6, 1.4, 16), toon(shadeHex(wallColor, 0.12)));
+    drum.position.y = height + 0.7;
+    drum.castShadow = true;
+    g.add(drum);
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(width / 2 + 0.4, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+      toon(roofColor)
+    );
+    dome.position.y = height + 1.4;
+    dome.castShadow = true;
+    g.add(dome);
+  }
+
+  // --- Door --------------------------------------------------------------
+  const doorW = 1.9, doorH = 3.2;
+  const door = new THREE.Mesh(new THREE.BoxGeometry(doorW, doorH, 0.25), toon(CONFIG.colors.wood));
+  door.position.set(0, doorH / 2, depth / 2 + 0.05);
+  door.castShadow = false;
+  g.add(door);
+
+  // Door frame
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(doorW + 0.5, doorH + 0.4, 0.18), toon(shadeHex(wallColor, -0.22)));
+  frame.position.set(0, (doorH + 0.4) / 2, depth / 2 + 0.02);
+  g.add(frame);
+  // Put the door back on top of its frame
+  door.position.z = depth / 2 + 0.16;
+
+  // A round doorknob
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), toon(0xD9B26A, { emissive: 0.25 }));
+  knob.position.set(0.6, 1.5, depth / 2 + 0.32);
+  g.add(knob);
+
+  // --- Windows with shutters --------------------------------------------
+  const winW = 1.5, winH = 1.7;
+  const glassMat = new THREE.MeshToonMaterial({
+    color: 0xBFE0EC, gradientMap: TOON_GRADIENT,
+    emissive: 0xFFE2A0, emissiveIntensity: 0.22,   // windows glow warmly
+  });
+  const shutterMat = toon(shutterColor);
+
+  const winPositions = [];
+  for (let f = 0; f < floors; f++) {
+    const y = 2.6 + f * (height - 3.4) / Math.max(1, floors - 1 || 1);
+    // Two windows on the front, evenly spaced either side of the door
+    for (const sx of [-1, 1]) {
+      winPositions.push({ x: sx * (width * 0.27), y: Math.min(y, height - 1.4), z: depth / 2 });
+    }
+  }
+
+  for (const w of winPositions) {
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(winW, winH, 0.14), glassMat);
+    glass.position.set(w.x, w.y, w.z + 0.06);
+    glass.userData.noOutline = true;   // glow should not have an ink line
+    g.add(glass);
+
+    // Frame
+    const wf = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.3, winH + 0.3, 0.12), toon(0xEFE6D6));
+    wf.position.set(w.x, w.y, w.z + 0.02);
+    g.add(wf);
+
+    // Shutters either side of the window
+    for (const sx of [-1, 1]) {
+      const sh = new THREE.Mesh(new THREE.BoxGeometry(0.62, winH + 0.2, 0.1), shutterMat);
+      sh.position.set(w.x + sx * (winW / 2 + 0.42), w.y, w.z + 0.14);
+      sh.userData.noOutline = true;
+      g.add(sh);
+
+      // Two horizontal slats on each shutter for detail
+      for (const dy of [-0.4, 0.4]) {
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.08, 0.04), toon(shadeHex(shutterColor, -0.2)));
+        slat.position.set(w.x + sx * (winW / 2 + 0.42), w.y + dy, w.z + 0.2);
+        slat.userData.noOutline = true;
+        g.add(slat);
+      }
+    }
+
+    // A stone sill
+    const sill = new THREE.Mesh(new THREE.BoxGeometry(winW + 1.1, 0.14, 0.4), toon(0xE4D9C4));
+    sill.position.set(w.x, w.y - winH / 2 - 0.16, w.z + 0.16);
+    g.add(sill);
+  }
+
+  // --- Balcony with a flower box ----------------------------------------
+  if (balcony) {
+    const bY = 2.6 + (height - 3.4) / 2 - 0.9;
+    const bDepth = 1.5;
+    const floorSlab = new THREE.Mesh(new THREE.BoxGeometry(width * 0.62, 0.18, bDepth), toon(shadeHex(wallColor, 0.16)));
+    floorSlab.position.set(0, bY, depth / 2 + bDepth / 2);
+    floorSlab.castShadow = true; floorSlab.receiveShadow = true;
+    g.add(floorSlab);
+
+    // Railing: vertical bars plus a top rail. Instanced would be ideal but
+    // there are only ~14 per balcony, so plain meshes are fine.
+    const railMat = toon(0x4F4A45);
+    const railW = width * 0.62;
+    for (let i = 0; i <= 12; i++) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.85, 0.06), railMat);
+      bar.position.set(-railW / 2 + (railW / 12) * i, bY + 0.5, depth / 2 + bDepth - 0.1);
+      bar.userData.noOutline = true;
+      g.add(bar);
+    }
+    const topRail = new THREE.Mesh(new THREE.BoxGeometry(railW, 0.09, 0.12), railMat);
+    topRail.position.set(0, bY + 0.92, depth / 2 + bDepth - 0.1);
+    g.add(topRail);
+
+    // Flower box sitting on the balcony floor, up against the railing.
+    // (bDepth is the balcony depth, so this is just inside the rail.)
+    const box = new THREE.Mesh(new THREE.BoxGeometry(railW * 0.7, 0.4, 0.42), toon(CONFIG.colors.terra));
+    box.position.set(0, bY + 0.29, depth / 2 + bDepth - 0.32);
+    box.castShadow = true;
+    g.add(box);
+    addFlowers(g, 0, bY + 0.49, depth / 2 + bDepth - 0.32, railW * 0.32, 14);
+  }
+
+  // --- Awning over the shopfront ----------------------------------------
+  if (awning) {
+    const stripes = makeAwningTexture(signAccent || CONFIG.colors.terra);
+    stripes.repeat.set(3, 1);
+    const aw = new THREE.Mesh(
+      new THREE.BoxGeometry(width * 0.8, 0.12, 2.2),
+      toon(0xFFFFFF, { map: stripes })
+    );
+    aw.position.set(0, doorH + 1.0, depth / 2 + 1.1);
+    aw.rotation.x = 0.14;
+    aw.castShadow = true;
+    g.add(aw);
+
+    // Scalloped front edge
+    for (let i = 0; i < 7; i++) {
+      const sc = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), toon(signAccent || CONFIG.colors.terra));
+      sc.position.set(-width * 0.36 + i * (width * 0.72 / 6), doorH + 0.86, depth / 2 + 2.16);
+      sc.scale.set(1, 0.7, 0.5);
+      sc.userData.noOutline = true;
+      g.add(sc);
+    }
+  }
+
+  // --- A veranda / covered porch (for the cafe-style buildings) ----------
+  if (veranda) {
+    const vW = width + 3, vD = 3.4;
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(vW, 0.22, vD), toon(CONFIG.colors.wood));
+    deck.position.set(0, 0.3, depth / 2 + vD / 2);
+    deck.receiveShadow = true; deck.castShadow = true;
+    g.add(deck);
+
+    // Four posts
+    for (const sx of [-1, 1]) {
+      for (const dz of [0, vD - 0.5]) {
+        const p = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 2.9, 8), toon(CONFIG.colors.woodDark));
+        p.position.set(sx * (vW / 2 - 0.4), 1.75, depth / 2 + 0.4 + dz);
+        p.castShadow = true;
+        g.add(p);
+      }
+    }
+    // Roof over the veranda
+    const vr = new THREE.Mesh(new THREE.BoxGeometry(vW + 0.4, 0.18, vD + 0.4), toon(CONFIG.colors.roofTerra));
+    vr.position.set(0, 3.25, depth / 2 + vD / 2);
+    vr.castShadow = true;
+    g.add(vr);
+  }
+
+  // --- A hanging lantern by the door ------------------------------------
+  if (lantern) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.8), toon(0x4F4A45));
+    arm.position.set(-1.5, doorH + 0.7, depth / 2 + 0.4);
+    g.add(arm);
+    const lamp = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.24, 0.3, 0.5, 8),
+      toon(0xFFE9B0, { emissive: 0.85 })
+    );
+    lamp.position.set(-1.5, doorH + 0.35, depth / 2 + 0.75);
+    lamp.userData.noOutline = true;
+    g.add(lamp);
+    // A warm point of light. NOT a shadow caster (that would be expensive).
+    const pl = new THREE.PointLight(0xFFCE8A, 6, 12, 2);
+    pl.position.set(-1.5, doorH + 0.3, depth / 2 + 0.8);
+    g.add(pl);
+  }
+
+  // --- The hanging sign --------------------------------------------------
+  const sign = buildHangingSign(signText, signSub, signAccent || CONFIG.colors.terra, width, doorH, depth);
+  g.add(sign);
+
+  scene.add(g);
+
+  // Outlines: one call walks the whole group.
+  addOutline(g, 0.022);
+
+  // --- Collision ---------------------------------------------------------
+  // The building is rotated, so we cannot simply use its width and depth.
+  // We use an axis-aligned box that contains the rotated footprint, which is
+  // slightly generous, and add a small margin.
+  const cos = Math.abs(Math.cos(rotationY)), sin = Math.abs(Math.sin(rotationY));
+  const halfX = (width * cos + depth * sin) / 2 + 0.3;
+  const halfZ = (width * sin + depth * cos) / 2 + 0.3;
+  addCollider(x, z, halfX, halfZ);
+
+  // --- Interaction: the doorway -----------------------------------------
+  // The interactable sits just outside the front door, in world space.
+  const doorLocal = new THREE.Vector3(0, 0, depth / 2 + 1.8);
+  doorLocal.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotationY);
+  addInteractable(
+    x + doorLocal.x,
+    z + doorLocal.z,
+    4.2,
+    `Enter ${signText}`,
+    opts.onEnter,
+    'enter'
+  );
+
+  addPlace(signText, signSub, x, z, hexToCss(wallColor));
+
+  // --- Register the building on the 2D town map --------------------------
+  // The map overlay draws its pins from this list, so without it the map
+  // would show an empty town. We record the entrance position (the same spot
+  // the interaction uses) so "you are here" and the pins line up exactly.
+  mapBuildings.push({
+    id: opts.id || signText.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    name: signText,
+    emoji: opts.emoji || '🏠',
+    desc: signSub,
+    info: opts.info || `${signSub}. Press E at the door to read this part of the blog.`,
+    section: opts.section || opts.id || null,
+    x, z,
+    w: width, d: depth,
+    rot: rotationY,
+    color: hexToCss(wallColor),
+    // Where the player stands to go in — this is where the pin is drawn.
+    doorX: x + doorLocal.x,
+    doorZ: z + doorLocal.z,
+  });
+
+  return g;
+}
+
+/** A canvas texture of diagonal stripes, used for awnings. */
+function makeAwningTexture(accentHex) {
+  const key = 'awning' + accentHex;
+  if (textureCache.has(key)) return textureCache.get(key);
+  const S = 128;
+  const { canvas, ctx } = makeCanvas(S, S);
+  ctx.fillStyle = '#FFFBF2';
+  ctx.fillRect(0, 0, S, S);
+  ctx.strokeStyle = hexToCss(accentHex);
+  ctx.lineWidth = 26;
+  for (let i = -S; i < S * 2; i += 52) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i + S, S);
+    ctx.stroke();
+  }
+  const tex = canvasTexture(canvas);
+  textureCache.set(key, tex);
+  return tex;
+}
+
+/**
+ * buildHangingSign — a bracket, two little rings and a sign board with the
+ * building's name on both sides, so it reads from either direction.
+ */
+function buildHangingSign(text, sub, accentHex, buildingWidth, doorHeight, depth) {
+  const g = new THREE.Group();
+
+  const signY = doorHeight + 1.5;
+  const signX = buildingWidth / 2 - 0.5;   // hang it to the right of the door
+
+  // The bracket: a horizontal bar sticking out from the wall
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 1.9), toon(0x4F4A45));
+  bar.position.set(signX, signY + 0.85, depth / 2 + 0.95);
+  g.add(bar);
+
+  // A little scroll under the bracket
+  const scroll = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.05, 6, 12, Math.PI), toon(0x4F4A45));
+  scroll.position.set(signX, signY + 0.8, depth / 2 + 1.45);
+  scroll.rotation.set(Math.PI / 2, 0, 0);
+  g.add(scroll);
+
+  // Two rings hanging the board
+  for (const dz of [-0.42, 0.42]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.02, 6, 10), toon(0x4F4A45));
+    ring.position.set(signX, signY + 0.55, depth / 2 + 1.45 + dz);
+    g.add(ring);
+  }
+
+  // The board itself: a plane with the sign texture, doubled for two sides.
+  const { tex, aspect } = signTexture([text], {
+    sub,
+    color: '#4A3B31',
+    subColor: '#8E6A52',
+    border: hexToCss(accentHex) + 'AA',
+    font: '600 62px Caveat, cursive',
+    subFont: '500 26px Quicksand, sans-serif',
+  });
+
+  const boardW = 3.1;
+  const boardH = boardW / aspect;
+  const boardMat = new THREE.MeshToonMaterial({
+    map: tex, gradientMap: TOON_GRADIENT, transparent: true, side: THREE.DoubleSide,
+  });
+
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(boardW, boardH), boardMat);
+  board.position.set(signX, signY - 0.15, depth / 2 + 1.45);
+  board.rotation.y = Math.PI;   // face outward from the wall
+  g.add(board);
+
+  // Backing plate so the sign has a physical edge
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(boardW - 0.16, boardH - 0.1, 0.07), toon(CONFIG.colors.wood));
+  plate.position.set(signX, signY - 0.15, depth / 2 + 1.42);
+  g.add(plate);
+
+  return g;
+}
+
+/**
+ * addFlowers — a cluster of tiny spheres for flower boxes and planters.
+ * Because flowers are repeated a lot, we build them with InstancedMesh:
+ * one draw call for the whole cluster no matter how many blossoms.
+ */
+function addFlowers(parent, x, y, z, radius, count, colors = [CONFIG.colors.flowerA, CONFIG.colors.flowerB, CONFIG.colors.flowerC]) {
+  const geo = new THREE.SphereGeometry(0.11, 6, 5);
+  const group = new THREE.Group();
+
+  // Group flowers by colour: one InstancedMesh per colour = 3 draw calls max.
+  for (const color of colors) {
+    const list = [];
+    for (let i = 0; i < count; i++) {
+      if (Math.random() > 1 / colors.length) continue;
+      list.push({ x: rand(-radius, radius), z: rand(-radius, radius), y: rand(-0.04, 0.14) });
+    }
+    if (!list.length) continue;
+    const inst = new THREE.InstancedMesh(geo, toon(color, { emissive: 0.08 }), list.length);
+    const m = new THREE.Matrix4();
+    list.forEach((f, i) => {
+      m.makeTranslation(f.x, f.y, f.z);
+      inst.setMatrixAt(i, m);
+    });
+    inst.instanceMatrix.needsUpdate = true;
+    inst.userData.noOutline = true;   // outlining every blossom would be costly
+    group.add(inst);
+  }
+
+  // A few green leaves underneath
+  const leafGeo = new THREE.SphereGeometry(0.13, 5, 4);
+  const leaves = new THREE.InstancedMesh(leafGeo, toon(CONFIG.colors.leafA), Math.max(4, Math.floor(count / 2)));
+  const m2 = new THREE.Matrix4();
+  for (let i = 0; i < leaves.count; i++) {
+    m2.makeTranslation(rand(-radius, radius), -0.05, rand(-radius, radius));
+    leaves.setMatrixAt(i, m2);
+  }
+  leaves.instanceMatrix.needsUpdate = true;
+  leaves.userData.noOutline = true;
+  group.add(leaves);
+
+  group.position.set(x, y, z);
+  parent.add(group);
+  return group;
+}
+
+// --------------------------------------------------------------------------
+// SMALL PROPS: trees, plants, lamps, benches, laundry, string lights
+// --------------------------------------------------------------------------
+
+/** A round leafy tree. `variant` changes the canopy shape slightly. */
+function buildTree(x, z, scale = 1, variant = 0) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  g.scale.setScalar(scale);
+  g.rotation.y = rand(0, Math.PI * 2);
+
+  // Trunk: slightly tapered, tilted a hair so it looks hand-drawn.
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.34, 2.4, 8), toon(CONFIG.colors.trunk));
+  trunk.position.y = 1.2;
+  trunk.rotation.z = rand(-0.05, 0.05);
+  trunk.castShadow = true;
+  g.add(trunk);
+
+  // Canopy: three overlapping spheres. Flat shading makes them read as
+  // soft, lumpy foliage rather than perfect balls.
+  const canopyColors = [CONFIG.colors.leafA, CONFIG.colors.leafB];
+  const blobs = variant === 1 ? 4 : 3;
+  for (let i = 0; i < blobs; i++) {
+    const r = rand(1.0, 1.5);
+    // faceted() breaks the sphere into loose triangles so it shades as a
+    // soft, chiselled lump of foliage instead of a perfect ball.
+    const c = new THREE.Mesh(
+      faceted(new THREE.SphereGeometry(r, 8, 6)),
+      toon(pick(canopyColors))
+    );
+    c.position.set(rand(-0.7, 0.7), 2.6 + rand(0, 1.0), rand(-0.7, 0.7));
+    c.scale.y = rand(0.8, 0.95);
+    c.castShadow = true;
+    g.add(c);
+  }
+
+  scene.add(g);
+  addOutline(g, 0.03);
+
+  // Slim collider so you cannot walk through the trunk
+  addCollider(x, z, 0.5 * scale, 0.5 * scale);
+  return g;
+}
+
+/** A slim Italian cypress — a tall cone. Adds vertical rhythm to the town. */
+function buildCypress(x, z, scale = 1) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  g.scale.setScalar(scale);
+
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 1.0, 6), toon(CONFIG.colors.trunk));
+  trunk.position.y = 0.5;
+  g.add(trunk);
+
+  const body = new THREE.Mesh(faceted(new THREE.ConeGeometry(0.75, 5.2, 9)), toon(0x7FA074));
+  body.position.y = 3.2;
+  body.castShadow = true;
+  g.add(body);
+
+  const tip = new THREE.Mesh(faceted(new THREE.ConeGeometry(0.45, 2.0, 9)), toon(0x8CAE80));
+  tip.position.y = 5.4;
+  tip.castShadow = true;
+  g.add(tip);
+
+  scene.add(g);
+  addOutline(g, 0.03);
+  addCollider(x, z, 0.45 * scale, 0.45 * scale);
+  return g;
+}
+
+/**
+ * A terracotta pot with a little shrub or lemon tree.
+ *
+ * `x` and `z` are WORLD coordinates, and that is where the collider is
+ * registered, so the physics always matches what you can see.
+ *
+ * `parent` lets you drop the pot into another group (for example the rooftop
+ * terrace). If you pass one, `x` and `z` are interpreted as coordinates
+ * INSIDE that group, and no collider is added for the pot — the caller is
+ * responsible for blocking that area.
+ */
+function buildPot(x, z, scale = 1, lemons = false, parent = null) {
+  const inWorld = parent === null;
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  g.scale.setScalar(scale);
+
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.38, 0.7, 10), toon(CONFIG.colors.terra));
+  pot.position.y = 0.35;
+  pot.castShadow = true; pot.receiveShadow = true;
+  g.add(pot);
+
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.56, 0.12, 10), toon(shadeHex(CONFIG.colors.terra, 0.12)));
+  rim.position.y = 0.7;
+  g.add(rim);
+
+  const soil = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.47, 0.06, 10), toon(0x6B5240));
+  soil.position.y = 0.74;
+  soil.userData.noOutline = true;
+  g.add(soil);
+
+  // The plant
+  const bush = new THREE.Mesh(faceted(new THREE.SphereGeometry(0.62, 8, 6)), toon(CONFIG.colors.leafB));
+  bush.position.y = 1.25;
+  bush.scale.y = 0.85;
+  bush.castShadow = true;
+  g.add(bush);
+
+  const bush2 = new THREE.Mesh(faceted(new THREE.SphereGeometry(0.42, 7, 5)), toon(CONFIG.colors.leafA));
+  bush2.position.set(0.3, 1.55, -0.15);
+  bush2.castShadow = true;
+  g.add(bush2);
+
+  if (lemons) {
+    const lemonGeo = new THREE.SphereGeometry(0.11, 6, 5);
+    const lemonInst = new THREE.InstancedMesh(lemonGeo, toon(0xF4D64A, { emissive: 0.12 }), 8);
+    const m = new THREE.Matrix4();
+    for (let i = 0; i < 8; i++) {
+      m.makeTranslation(rand(-0.5, 0.5), rand(1.0, 1.75), rand(-0.5, 0.5));
+      lemonInst.setMatrixAt(i, m);
+    }
+    lemonInst.instanceMatrix.needsUpdate = true;
+    lemonInst.userData.noOutline = true;
+    g.add(lemonInst);
+  }
+
+  if (inWorld) {
+    scene.add(g);
+    addCollider(x, z, 0.5 * scale, 0.5 * scale);
+  } else {
+    parent.add(g);
+  }
+
+  addOutline(g, 0.03);
+  return g;
+}
+
+/** A street lamp with a warm glow (no shadow casting — too expensive). */
+function buildLamp(x, z) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.14, 4.0, 8), toon(0x4F4A45));
+  pole.position.y = 2.0;
+  pole.castShadow = true;
+  g.add(pole);
+
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.34, 0.4, 8), toon(0x4F4A45));
+  base.position.y = 0.2;
+  g.add(base);
+
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.6), toon(0x4F4A45));
+  arm.position.set(0, 3.95, 0.3);
+  g.add(arm);
+
+  const shade = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.34, 8, 1, true), toon(0x5A5450, { side: THREE.DoubleSide }));
+  shade.position.set(0, 3.8, 0.56);
+  g.add(shade);
+
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.2, 8, 6),
+    toon(0xFFE9B0, { emissive: 1.0 })
+  );
+  bulb.position.set(0, 3.62, 0.56);
+  bulb.userData.noOutline = true;
+  g.add(bulb);
+
+  const light = new THREE.PointLight(0xFFCE8A, 5, 14, 2);
+  light.position.set(0, 3.5, 0.56);
+  g.add(light);
+
+  scene.add(g);
+  addOutline(g, 0.025);
+  addCollider(x, z, 0.3, 0.3);
+  return g;
+}
+
+/** A bench you can imagine sitting on (sitting arrives in a later stage). */
+function buildBench(x, z, rotationY = 0) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  g.rotation.y = rotationY;
+
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.12, 0.6), toon(CONFIG.colors.wood));
+  seat.position.y = 0.55;
+  seat.castShadow = true; seat.receiveShadow = true;
+  g.add(seat);
+
+  const back = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.5, 0.1), toon(CONFIG.colors.wood));
+  back.position.set(0, 0.85, -0.26);
+  back.castShadow = true;
+  g.add(back);
+
+  for (const sx of [-0.85, 0.85]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.55, 0.5), toon(CONFIG.colors.woodDark));
+    leg.position.set(sx, 0.27, 0);
+    leg.castShadow = true;
+    g.add(leg);
+  }
+
+  scene.add(g);
+  addOutline(g, 0.025);
+  addCollider(x, z, 1.1, 0.45);
+  return g;
+}
+
+/**
+ * A laundry line: a wire between two points with cloth rectangles hanging
+ * from it. The cloth swings gently in the update loop.
+ */
+const laundryItems = [];
+function buildLaundry(x1, z1, x2, z2, y = 4.2) {
+  const g = new THREE.Group();
+
+  // The wire: a thin long box between the two points.
+  const dx = x2 - x1, dz = z2 - z1;
+  const length = Math.hypot(dx, dz);
+  const wire = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.02, 0.02, length, 4),
+    new THREE.MeshBasicMaterial({ color: 0x6B5B4A })
+  );
+  wire.position.set((x1 + x2) / 2, y - 0.12, (z1 + z2) / 2);
+  wire.rotation.z = Math.PI / 2;
+  wire.rotation.y = -Math.atan2(dz, dx);
+  wire.userData.noOutline = true;
+  g.add(wire);
+
+  // Cloths in soft, faded colours.
+  const clothColors = [0xFFFFFF, 0xF7E7C9, 0xCFE3F2, 0xF2C9CE, 0xE4EBD5, 0xF3E2B8];
+  const count = Math.max(3, Math.floor(length / 1.6));
+  for (let i = 1; i <= count; i++) {
+    const t = i / (count + 1);
+    const cx = lerp(x1, x2, t);
+    const cz = lerp(z1, z2, t);
+    const w = rand(0.7, 1.05), h = rand(0.85, 1.35);
+
+    const cloth = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      toon(pick(clothColors), { side: THREE.DoubleSide })
+    );
+    cloth.position.set(cx, y - h / 2, cz);
+    cloth.castShadow = true;
+    cloth.userData.noOutline = true;
+    cloth.userData.swingPhase = rand(0, Math.PI * 2);
+    cloth.userData.baseRotZ = 0;
+    g.add(cloth);
+    laundryItems.push(cloth);
+
+    // Two tiny pegs
+    for (const sx of [-w / 4, w / 4]) {
+      const peg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.05), toon(0xC8A57A));
+      peg.position.set(cx + sx, y - 0.06, cz);
+      peg.userData.noOutline = true;
+      g.add(peg);
+    }
+  }
+
+  scene.add(g);
+  return g;
+}
+
+/**
+ * String lights: a catenary (drooping) line of small glowing bulbs between
+ * two points. We use InstancedMesh so 30 bulbs cost one draw call.
+ */
+const stringLights = [];
+function buildStringLights(x1, z1, x2, z2, y = 4.4, sag = 1.1, count = 26) {
+  const bulbs = [];
+  const wirePts = [];
+  for (let i = 0; i <= 20; i++) {
+    const t = i / 20;
+    const x = lerp(x1, x2, t);
+    const z = lerp(z1, z2, t);
+    const y2 = y - Math.sin(t * Math.PI) * sag;
+    wirePts.push(new THREE.Vector3(x, y2, z));
+  }
+
+  // The wire, drawn as a thin tube following the curve.
+  const curve = new THREE.CatmullRomCurve3(wirePts);
+  const wire = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 20, 0.025, 4, false),
+    new THREE.MeshBasicMaterial({ color: 0x5B4A3A })
+  );
+  wire.userData.noOutline = true;
+  scene.add(wire);
+
+  // The bulbs, as instances positioned along the same curve.
+  const geo = new THREE.SphereGeometry(0.1, 6, 5);
+  const mat = toon(0xFFF0C0, { emissive: 1.0 });
+  const inst = new THREE.InstancedMesh(geo, mat, count);
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count;
+    const p = curve.getPoint(t);
+    m.makeTranslation(p.x, p.y - 0.12, p.z);
+    inst.setMatrixAt(i, m);
+    bulbs.push({ base: p.clone(), phase: rand(0, Math.PI * 2) });
+  }
+  inst.instanceMatrix.needsUpdate = true;
+  inst.userData.noOutline = true;
+  inst.userData.bulbs = bulbs;
+  scene.add(inst);
+  stringLights.push(inst);
+  return inst;
+}
+
+// --------------------------------------------------------------------------
+// DISTANT HILLS, THE LIGHTHOUSE, THE PIER AND BOATS
+// --------------------------------------------------------------------------
+function buildHills() {
+  // Hills are flattened, scaled spheres. Because they are far away and
+  // fogged, a handful of them is plenty.
+  const hillMatFar = toon(CONFIG.colors.hillFar);
+  const hillMatNear = toon(CONFIG.colors.hillNear);
+
+  const hills = [
+    { x: -120, z: -160, r: 60, h: 0.30, far: true },
+    { x: -40, z: -190, r: 78, h: 0.26, far: true },
+    { x: 60, z: -175, r: 66, h: 0.28, far: true },
+    { x: 150, z: -150, r: 54, h: 0.32, far: true },
+    { x: -170, z: -120, r: 48, h: 0.36, far: true },
+    { x: -90, z: -120, r: 38, h: 0.42, far: false },
+    { x: 100, z: -125, r: 42, h: 0.40, far: false },
+    { x: 20, z: -140, r: 34, h: 0.44, far: false },
+  ];
+
+  for (const h of hills) {
+    const m = new THREE.Mesh(faceted(new THREE.SphereGeometry(h.r, 14, 10)), h.far ? hillMatFar : hillMatNear);
+    m.position.set(h.x, -h.r * (1 - h.h), h.z);
+    m.scale.set(1, h.h + 0.2, 1);
+    m.userData.noOutline = true;   // no ink line on distant scenery
+    m.receiveShadow = false;
+    scene.add(m);
+  }
+
+  // A headland behind the town with a lighthouse on it — gives the horizon
+  // a focal point.
+  const headland = new THREE.Mesh(faceted(new THREE.SphereGeometry(26, 18, 12)), toon(0xB3C4A6));
+  headland.position.set(84, -16, 40);
+  headland.scale.set(1.3, 0.62, 1);
+  headland.userData.noOutline = true;
+  scene.add(headland);
+
+  buildLighthouse(88, 34);
+}
+
+/** A striped lighthouse on the headland. */
+function buildLighthouse(x, z) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  g.scale.setScalar(0.9);
+
+  // The headland top is about y = 0, so build from there.
+  const towerPart1 = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.9, 4, 14), toon(0xFBF3E6));
+  towerPart1.position.y = 2;
+  g.add(towerPart1);
+  const band1 = new THREE.Mesh(new THREE.CylinderGeometry(1.52, 1.6, 1.6, 14), toon(0xD9705A));
+  band1.position.y = 4.8;
+  g.add(band1);
+  const towerPart2 = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.5, 4, 14), toon(0xFBF3E6));
+  towerPart2.position.y = 7.6;
+  g.add(towerPart2);
+
+  const gallery = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 0.3, 14), toon(0x4F4A45));
+  gallery.position.y = 9.8;
+  g.add(gallery);
+
+  const lampRoom = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.05, 1.05, 1.7, 12),
+    toon(0xFFE9B0, { emissive: 0.9 })
+  );
+  lampRoom.position.y = 10.8;
+  lampRoom.userData.noOutline = true;
+  g.add(lampRoom);
+
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(1.4, 1.2, 12), toon(0xD9705A));
+  roof.position.y = 12.2;
+  g.add(roof);
+
+  // A soft glow light so it reads at dusk.
+  const pl = new THREE.PointLight(0xFFE0A8, 12, 40, 2);
+  pl.position.y = 10.8;
+  g.add(pl);
+
+  scene.add(g);
+  addOutline(g, 0.03);
+}
+
+/** A wooden pier reaching into the sea, with mooring posts. */
+function buildPier() {
+  const g = new THREE.Group();
+
+  const deckMat = toon(CONFIG.colors.wood);
+  const postMat = toon(CONFIG.colors.woodDark);
+
+  // The deck: planks from the beach (z=58) out to z=100.
+  const zStart = 58, zEnd = 104;
+  const deck = new THREE.Mesh(
+    new THREE.BoxGeometry(4.2, 0.3, zEnd - zStart),
+    deckMat
+  );
+  deck.position.set(-38, 1.35, (zStart + zEnd) / 2);
+  deck.castShadow = true; deck.receiveShadow = true;
+  g.add(deck);
+
+  // Plank lines: thin dark boxes across the deck, repeated with InstancedMesh.
+  const plankCount = Math.floor((zEnd - zStart) / 1.1);
+  const plankGeo = new THREE.BoxGeometry(4.3, 0.06, 0.08);
+  const planks = new THREE.InstancedMesh(plankGeo, toon(shadeHex(CONFIG.colors.wood, -0.28)), plankCount);
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < plankCount; i++) {
+    m.makeTranslation(-38, 1.51, zStart + i * 1.1);
+    planks.setMatrixAt(i, m);
+  }
+  planks.instanceMatrix.needsUpdate = true;
+  planks.userData.noOutline = true;
+  g.add(planks);
+
+  // Support posts on both sides, going down into the water.
+  const postGeo = new THREE.CylinderGeometry(0.22, 0.26, 3.6, 7);
+  const sideCount = Math.floor((zEnd - zStart) / 5);
+  const posts = new THREE.InstancedMesh(postGeo, postMat, sideCount * 2);
+  let idx = 0;
+  for (let i = 0; i < sideCount; i++) {
+    const z = zStart + 2.5 + i * 5;
+    for (const dx of [-1.9, 1.9]) {
+      m.makeTranslation(-38 + dx, 0.4, z);
+      posts.setMatrixAt(idx++, m);
+    }
+  }
+  posts.instanceMatrix.needsUpdate = true;
+  posts.userData.noOutline = true;
+  g.add(posts);
+
+  // A little lamp at the end of the pier
+  const lampPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.6, 6), toon(0x4F4A45));
+  lampPost.position.set(-38, 2.8, zEnd - 1);
+  g.add(lampPost);
+  const lampHead = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), toon(0xFFE9B0, { emissive: 1.0 }));
+  lampHead.position.set(-38, 4.2, zEnd - 1);
+  lampHead.userData.noOutline = true;
+  g.add(lampHead);
+  const pl = new THREE.PointLight(0xFFCE8A, 8, 20, 2);
+  pl.position.set(-38, 4.1, zEnd - 1);
+  g.add(pl);
+
+  scene.add(g);
+  addOutline(g, 0.02);
+  addPlace('Molo', 'The little pier. Good for watching the water.', -38, 80, '#B98A5E');
+}
+
+/** Small brightly-painted boats. `bob` data is animated in the loop. */
+const boats = [];
+function buildBoats() {
+  const hullColors = [0x6FA8C4, 0xE88C7D, 0xF2D06B, 0x8FB18A, 0xF3F0E6];
+
+  const makeBoat = (x, z, rotY, scale) => {
+    const g = new THREE.Group();
+    g.position.set(x, 0.15, z);
+    g.rotation.y = rotY;
+    g.scale.setScalar(scale);
+
+    const hullColor = pick(hullColors);
+
+    // Hull: a squashed sphere is a surprisingly good little boat shape.
+    const hull = new THREE.Mesh(new THREE.SphereGeometry(1.0, 12, 8), toon(hullColor));
+    hull.scale.set(1.0, 0.45, 1.9);
+    hull.position.y = 0.25;
+    hull.castShadow = true;
+    g.add(hull);
+
+    // A darker stripe along the waterline
+    const stripe = new THREE.Mesh(new THREE.SphereGeometry(1.02, 12, 4), toon(shadeHex(hullColor, -0.35)));
+    stripe.scale.set(1.0, 0.42, 1.9);
+    stripe.position.y = 0.02;
+    stripe.userData.noOutline = true;
+    g.add(stripe);
+
+    // The interior (a dark hollow)
+    const inner = new THREE.Mesh(new THREE.SphereGeometry(0.86, 10, 6), toon(0x9A7B5C));
+    inner.scale.set(1.0, 0.4, 1.8);
+    inner.position.y = 0.42;
+    inner.userData.noOutline = true;
+    g.add(inner);
+
+    // A bench seat inside
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 0.35), toon(CONFIG.colors.wood));
+    seat.position.set(0, 0.5, -0.4);
+    g.add(seat);
+
+    // Mast and a little furled sail
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 3.4, 6), toon(CONFIG.colors.woodDark));
+    mast.position.set(0, 1.9, 0.1);
+    mast.castShadow = true;
+    g.add(mast);
+
+    const sail = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.13, 0.13, 2.0, 6),
+      toon(0xFBF3E6)
+    );
+    sail.position.set(0, 1.6, 0.1);
+    sail.rotation.x = 0.1;
+    g.add(sail);
+
+    scene.add(g);
+    addOutline(g, 0.03);
+    boats.push({ group: g, baseY: 0.15, phase: rand(0, Math.PI * 2), amp: rand(0.06, 0.16), rotAmp: rand(0.01, 0.03) });
+    return g;
+  };
+
+  makeBoat(-46, 74, 0.4, 1.0);
+  makeBoat(-30, 88, -1.1, 1.15);
+  makeBoat(-52, 96, 2.2, 0.9);
+  makeBoat(-14, 108, 0.7, 1.25);
+  makeBoat(-62, 62, -0.5, 1.05);
+  makeBoat(18, 116, 1.8, 1.0);
+}
+
+/* ==========================================================================
+   SECTION 8 — THE CHARACTER
+   --------------------------------------------------------------------------
+   The player is built from primitives, parented into a small "rig" so we can
+   animate limbs by rotating groups. The structure is:
+
+     root  (position on the ground, rotation = facing direction)
+      └ body (bobs up and down while walking)
+         ├ legL, legR   (rotate around their top = the hip)
+         ├ torso        (the rounded body)
+         │   ├ armL, armR (rotate around their top = the shoulder)
+         │   ├ head     (with hat, face, scarf)
+   ========================================================================== */
+
+let player = null;      // the root Object3D
+let playerParts = null; // references to the bits we animate
+
+function buildCharacter() {
+  const C = CONFIG.colors;
+
+  const root = new THREE.Group();
+  root.position.set(CONFIG.spawn.x, 0, CONFIG.spawn.z);
+
+  const body = new THREE.Group();      // used for the walk bob
+  root.add(body);
+
+  // ---- Legs ------------------------------------------------------------
+  // Each leg is a Group positioned at the hip; the mesh hangs below it, so
+  // rotating the group swings the leg from the hip. Correct pivot = correct
+  // animation, and it costs nothing.
+  const legGeo = new THREE.CapsuleGeometry(0.17, 0.36, 4, 8);
+  const legMat = toon(C.trousers);
+
+  const makeLeg = (side) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.19, 0.72, 0);   // hip height
+    const leg = new THREE.Mesh(legGeo, legMat);
+    leg.position.y = -0.28;                      // hangs down from the hip
+    leg.castShadow = true;
+    pivot.add(leg);
+
+    // A little shoe at the bottom
+    const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), toon(0x6B5B4A));
+    shoe.position.set(0, -0.52, 0.07);
+    shoe.scale.set(1, 0.7, 1.35);
+    shoe.castShadow = true;
+    pivot.add(shoe);
+
+    body.add(pivot);
+    return pivot;
+  };
+  const legL = makeLeg(-1);
+  const legR = makeLeg(1);
+
+  // ---- Torso -----------------------------------------------------------
+  const torso = new THREE.Group();
+  torso.position.y = 0.72;      // sits on top of the hips
+  body.add(torso);
+
+  // A rounded capsule body — soft and toy-like.
+  const chest = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 0.30, 6, 12), toon(C.shirt));
+  chest.position.y = 0.42;
+  chest.castShadow = true;
+  torso.add(chest);
+
+  // A slightly darker band at the waist so the shape reads clearly.
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.345, 0.345, 0.12, 12), toon(shadeHex(C.shirt, -0.3)));
+  belt.position.y = 0.16;
+  belt.userData.noOutline = true;
+  torso.add(belt);
+
+  // ---- Arms ------------------------------------------------------------
+  const armGeo = new THREE.CapsuleGeometry(0.115, 0.34, 4, 8);
+  const armMat = toon(C.shirt);
+
+  const makeArm = (side) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.44, 0.68, 0);   // shoulder
+    const arm = new THREE.Mesh(armGeo, armMat);
+    arm.position.y = -0.25;
+    arm.castShadow = true;
+    pivot.add(arm);
+
+    // Hand
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), toon(C.skin));
+    hand.position.y = -0.46;
+    hand.castShadow = true;
+    pivot.add(hand);
+
+    torso.add(pivot);
+    return pivot;
+  };
+  const armL = makeArm(-1);
+  const armR = makeArm(1);
+
+  // ---- Head ------------------------------------------------------------
+  const head = new THREE.Group();
+  head.position.y = 1.0;   // relative to the torso
+  torso.add(head);
+
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.38, 16, 12), toon(C.skin));
+  skull.castShadow = true;
+  head.add(skull);
+
+  // Hair: a slightly bigger half-sphere sitting on top and back.
+  const hair = new THREE.Mesh(
+    new THREE.SphereGeometry(0.395, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62),
+    toon(C.hair)
+  );
+  hair.position.y = 0.03;
+  hair.rotation.x = -0.22;
+  hair.userData.noOutline = true;
+  head.add(hair);
+
+  // Eyes: two small dark spheres. `noOutline` keeps them from growing a line.
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), toon(0x3A2C24));
+    eye.position.set(sx * 0.14, 0.03, 0.345);
+    eye.userData.noOutline = true;
+    head.add(eye);
+
+    // A tiny highlight dot makes the eyes feel alive.
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.02, 6, 4), new THREE.MeshBasicMaterial({ color: 0xFFFFFF }));
+    glint.position.set(sx * 0.14 + 0.02, 0.06, 0.375);
+    glint.userData.noOutline = true;
+    head.add(glint);
+
+    // Cheeks
+    const cheek = new THREE.Mesh(
+      new THREE.SphereGeometry(0.07, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xF3A9A0, transparent: true, opacity: 0.55 })
+    );
+    cheek.position.set(sx * 0.25, -0.08, 0.30);
+    cheek.scale.z = 0.3;
+    cheek.userData.noOutline = true;
+    head.add(cheek);
+  }
+
+  // A little smile: a thin torus arc, rotated to face forward.
+  const smile = new THREE.Mesh(
+    new THREE.TorusGeometry(0.075, 0.017, 5, 10, Math.PI),
+    new THREE.MeshBasicMaterial({ color: 0x8A5A46 })
+  );
+  smile.position.set(0, -0.1, 0.36);
+  smile.rotation.z = Math.PI;    // flip the arc so it curves upward
+  smile.userData.noOutline = true;
+  head.add(smile);
+
+  // ---- Hat: a soft straw sun hat --------------------------------------
+  const hat = new THREE.Group();
+  hat.position.y = 0.30;
+  head.add(hat);
+
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.58, 0.05, 16), toon(C.hat));
+  brim.castShadow = true;
+  hat.add(brim);
+
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.32, 0.3, 14), toon(C.hat));
+  crown.position.y = 0.16;
+  crown.castShadow = true;
+  hat.add(crown);
+
+  // A ribbon around the crown
+  const ribbon = new THREE.Mesh(new THREE.CylinderGeometry(0.325, 0.325, 0.07, 14), toon(C.scarf));
+  ribbon.position.y = 0.05;
+  ribbon.userData.noOutline = true;
+  hat.add(ribbon);
+
+  // ---- Scarf -----------------------------------------------------------
+  const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.075, 6, 14), toon(C.scarf));
+  scarf.position.y = 0.80;   // relative to torso = around the neck
+  scarf.rotation.x = Math.PI / 2;
+  scarf.castShadow = true;
+  torso.add(scarf);
+
+  // The dangling end of the scarf, animated to flutter.
+  const scarfTail = new THREE.Group();
+  scarfTail.position.set(-0.1, 0.76, -0.3);
+  torso.add(scarfTail);
+  const tailMesh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, 0.06), toon(C.scarf));
+  tailMesh.position.y = -0.25;
+  tailMesh.castShadow = true;
+  scarfTail.add(tailMesh);
+
+  // ---- Finish ----------------------------------------------------------
+  scene.add(root);
+  addOutline(root, 0.03);
+
+  // The player casts a shadow but we do NOT add the player to colliders —
+  // the player is what collides with everything else.
+  root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+
+  player = root;
+  playerParts = { body, torso, head, hat, legL, legR, armL, armR, scarfTail };
+
+  return root;
+}
+
+/* ==========================================================================
+   SECTION 9 — INPUT
+   --------------------------------------------------------------------------
+   One `input` object collects everything: keyboard, mouse drag and touch.
+   The rest of the code only ever reads from it, never from events directly.
+   ========================================================================== */
+const input = {
+  forward: 0,      // -1 .. 1   (from keyboard or joystick)
+  strafe: 0,       // -1 .. 1
+  run: false,
+  // Camera orbit, driven by mouse drag / touch drag.
+  orbitX: 0,
+  orbitY: 0,
+  // One-shot flags consumed by the game loop.
+  interactPressed: false,
+};
+
+// The camera's yaw (left/right) and pitch (up/down), in radians.
+let camYaw = Math.PI;      // start looking from behind (the player faces -z)
+let camPitch = 0.22;
+let camDistance = CONFIG.camera.distance;   // adjustable with C / wheel
+
+// Keyboard state: we track which keys are held, then derive forward/strafe.
+const keys = Object.create(null);
+
+function setupKeyboard() {
+  window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    keys[k] = true;
+
+    // Stop the page scrolling when arrows / space are used.
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+
+    // --- One-shot actions ---
+    if (k === 'e') {
+      // Only fire the interact if no overlay is open.
+      if (!anyOverlayOpen()) input.interactPressed = true;
+    }
+    if (k === 'escape') {
+      // Esc closes whatever is open, or opens the help sheet.
+      if (anyOverlayOpen()) closeAllOverlays();
+      else openOverlay('ov-help');
+    }
+    if (k === 'm') {
+      if (document.getElementById('ov-map').classList.contains('show')) closeOverlay('ov-map');
+      else openOverlay('ov-map');
+    }
+    if (k === 'c') {
+      // Cycle the camera between three preset distances.
+      camDistance = camDistance > 10 ? CONFIG.camera.distanceMin
+                  : camDistance > 6.5 ? CONFIG.camera.distanceMax
+                  : 6.5;
+      camTargetDistance = camDistance;
+    }
+  });
+
+  window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+  // If the window loses focus, release everything — otherwise the character
+  // walks off on its own after an alt-tab.
+  window.addEventListener('blur', () => {
+    for (const k in keys) keys[k] = false;
+  });
+}
+
+function readKeyboard() {
+  const k = keys;
+  const f = (k['w'] || k['arrowup'] ? 1 : 0) - (k['s'] || k['arrowdown'] ? 1 : 0);
+  const s = (k['d'] || k['arrowright'] ? 1 : 0) - (k['a'] || k['arrowleft'] ? 1 : 0);
+  input.run = !!(k['shift']);
+  return { f, s };
+}
+
+/** Mouse drag to orbit the camera. */
+function setupMouse() {
+  let dragging = false;
+  let lastX = 0, lastY = 0;
+
+  const canvas = renderer.domElement;
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') return;    // touch has its own handler
+    dragging = true;
+    lastX = e.clientX; lastY = e.clientY;
+    canvas.style.cursor = 'grabbing';
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (!dragging || e.pointerType === 'touch') return;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+
+    // Dragging right turns the view right.
+    camYaw -= dx * CONFIG.camera.sensitivity;
+    camPitch = clamp(camPitch + dy * CONFIG.camera.sensitivity, CONFIG.camera.minPitch, CONFIG.camera.maxPitch);
+  });
+
+  window.addEventListener('pointerup', () => {
+    dragging = false;
+    canvas.style.cursor = 'grab';
+  });
+  canvas.style.cursor = 'grab';
+
+  // Mouse wheel = zoom.
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    camTargetDistance = clamp(
+      camTargetDistance + Math.sign(e.deltaY) * 0.9,
+      CONFIG.camera.distanceMin,
+      CONFIG.camera.distanceMax
+    );
+  }, { passive: false });
+}
+
+/** Touch drag on the empty part of the screen also orbits the camera. */
+function setupTouchCamera() {
+  let touchId = null, lastX = 0, lastY = 0;
+
+  renderer.domElement.addEventListener('touchstart', (e) => {
+    const t = e.changedTouches[0];
+    touchId = t.identifier; lastX = t.clientX; lastY = t.clientY;
+  }, { passive: true });
+
+  renderer.domElement.addEventListener('touchmove', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== touchId) continue;
+      const dx = t.clientX - lastX, dy = t.clientY - lastY;
+      lastX = t.clientX; lastY = t.clientY;
+      camYaw -= dx * CONFIG.camera.sensitivity * 1.5;
+      camPitch = clamp(camPitch + dy * CONFIG.camera.sensitivity * 1.5, CONFIG.camera.minPitch, CONFIG.camera.maxPitch);
+    }
+  }, { passive: true });
+
+  renderer.domElement.addEventListener('touchend', () => { touchId = null; }, { passive: true });
+}
+
+/**
+ * VIRTUAL JOYSTICK
+ * Touch inside the base, drag the knob; we read the offset as a direction.
+ * Deadzone in the middle so a resting thumb does not creep.
+ */
+const joy = { active: false, x: 0, y: 0, id: null };
+
+function setupJoystick() {
+  const base = document.getElementById('joystick');
+  const knob = document.getElementById('joy-knob');
+  const R = 44;   // max travel of the knob, in pixels
+
+  const setKnob = (dx, dy) => {
+    knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  };
+
+  const handle = (touch) => {
+    const rect = base.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let dx = touch.clientX - cx;
+    let dy = touch.clientY - cy;
+
+    // Clamp the knob inside the base circle.
+    const dist = Math.hypot(dx, dy);
+    if (dist > R) { dx = (dx / dist) * R; dy = (dy / dist) * R; }
+
+    setKnob(dx, dy);
+
+    // Normalise to -1..1. Deadzone of 0.18 stops tiny accidental drift.
+    const nx = dx / R, ny = dy / R;
+    const mag = Math.hypot(nx, ny);
+    if (mag < 0.18) { joy.x = 0; joy.y = 0; }
+    else { joy.x = nx; joy.y = ny; }
+  };
+
+  base.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    joy.active = true;
+    joy.id = e.changedTouches[0].identifier;
+    handle(e.changedTouches[0]);
+  }, { passive: false });
+
+  base.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) if (t.identifier === joy.id) handle(t);
+  }, { passive: false });
+
+  const end = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== joy.id) continue;
+      joy.active = false; joy.id = null; joy.x = 0; joy.y = 0;
+      setKnob(0, 0);
+    }
+  };
+  base.addEventListener('touchend', end, { passive: true });
+  base.addEventListener('touchcancel', end, { passive: true });
+
+  // Desktop fallback: let the mouse drag the joystick too, which is handy
+  // while testing on a laptop with a touchscreen.
+  let mouseDown = false;
+  base.addEventListener('mousedown', (e) => { mouseDown = true; joy.active = true; handle(e); });
+  window.addEventListener('mousemove', (e) => { if (mouseDown) handle(e); });
+  window.addEventListener('mouseup', () => {
+    if (!mouseDown) return;
+    mouseDown = false; joy.active = false; joy.x = 0; joy.y = 0; setKnob(0, 0);
+  });
+}
+
+/** Show the touch UI only on devices that actually have touch. */
+function setupTouchUI() {
+  const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  if (isTouch) document.getElementById('touch-ui').classList.add('on');
+
+  const btn = document.getElementById('btn-interact');
+  btn.addEventListener('click', () => {
+    if (!anyOverlayOpen()) input.interactPressed = true;
+  });
+  // Also treat a touch as a press, for immediate response.
+  btn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (!anyOverlayOpen()) input.interactPressed = true;
+  }, { passive: false });
+}
+
+/* ==========================================================================
+   SECTION 10 — THE THIRD-PERSON CAMERA
+   --------------------------------------------------------------------------
+   Two jobs: sit behind the player, and never end up inside a wall.
+
+   The camera position is computed from the player's position plus an offset
+   derived from the yaw/pitch. Then we "damp" (smoothly move) the real camera
+   toward that target, which is what gives the soft, unhurried follow.
+   ========================================================================== */
+let camTargetDistance = CONFIG.camera.distance;
+const cameraPos = new THREE.Vector3();      // smoothed camera position
+const cameraLook = new THREE.Vector3();     // smoothed look-at point
+const camRaycaster = new THREE.Raycaster();
+
+// Meshes the camera must not clip through. This is filled in automatically
+// at start-up (see the "Register the camera blockers" step) by looking for
+// large box-shaped meshes — the building walls.
+const cameraBlockers = [];
+
+function updateCamera(dt, moving) {
+  if (!player) return;
+
+  // --- Where should the camera be? -------------------------------------
+  const px = player.position.x;
+  const py = player.position.y;
+  const pz = player.position.z;
+
+  // A slightly higher look-at point when standing, lower when close to the ground.
+  const lookHeight = CONFIG.camera.lookAtHeight;
+
+  // Spherical offset: yaw around, pitch up/down, at the current distance.
+  const dist = camTargetDistance;
+  const horiz = Math.cos(camPitch) * dist;
+  const vert = Math.sin(camPitch) * dist;
+
+  let desiredX = px + Math.sin(camYaw) * horiz;
+  let desiredZ = pz + Math.cos(camYaw) * horiz;
+  let desiredY = py + CONFIG.camera.height + vert;
+
+  // --- Never look through the ground -----------------------------------
+  if (desiredY < py + 0.8) desiredY = py + 0.8;
+
+  // --- Keep the camera out of buildings --------------------------------
+  // Cast a ray from the player's head to the desired camera spot. If it hits
+  // something, pull the camera to just in front of the hit. This is the same
+  // trick every third-person game uses.
+  const origin = new THREE.Vector3(px, py + lookHeight, pz);
+  const dir = new THREE.Vector3(desiredX - origin.x, desiredY - origin.y, desiredZ - origin.z);
+  const distToCamera = dir.length();
+  dir.normalize();
+
+  camRaycaster.set(origin, dir);
+  camRaycaster.far = distToCamera;
+
+  if (cameraBlockers.length) {
+    const hits = camRaycaster.intersectObjects(cameraBlockers, false);
+    if (hits.length && hits[0].distance < distToCamera) {
+      // Stop 0.6 units short of the wall so we never see through it.
+      const safe = Math.max(1.2, hits[0].distance - 0.6);
+      desiredX = origin.x + dir.x * safe;
+      desiredY = origin.y + dir.y * safe;
+      desiredZ = origin.z + dir.z * safe;
+    }
+  }
+
+  // --- Smoothly move toward it -----------------------------------------
+  // When the player is running, tighten the damping so the camera keeps up;
+  // when standing still, relax it for a floatier, calmer feel.
+  const damping = moving ? CONFIG.camera.damping * 1.5 : CONFIG.camera.damping;
+  cameraPos.x = damp(cameraPos.x, desiredX, damping, dt);
+  cameraPos.y = damp(cameraPos.y, desiredY, damping, dt);
+  cameraPos.z = damp(cameraPos.z, desiredZ, damping, dt);
+
+  camera.position.copy(cameraPos);
+
+  // Aim slightly ahead of the player when moving, so you can see where you
+  // are going rather than staring at your own back.
+  const aheadX = px + Math.sin(playerYaw) * (moving ? 1.1 : 0);
+  const aheadZ = pz + Math.cos(playerYaw) * (moving ? 1.1 : 0);
+
+  cameraLook.x = damp(cameraLook.x, aheadX, 8, dt);
+  cameraLook.y = damp(cameraLook.y, py + lookHeight, 8, dt);
+  cameraLook.z = damp(cameraLook.z, aheadZ, 8, dt);
+  camera.lookAt(cameraLook);
+}
+
+/* ==========================================================================
+   SECTION 11 — MOVEMENT, COLLISION AND ANIMATION
+   ========================================================================== */
+
+let playerYaw = 0;           // the direction the character faces, in radians
+let playerSpeed = 0;         // current speed, for blending walk/run
+let isMoving = false;
+let walkCycle = 0;           // advances with distance travelled
+let idleTime = 0;
+
+/**
+ * moveAndCollide(dx, dz)
+ * Try to move the player. If the new position overlaps an obstacle we slide
+ * along it instead of stopping dead — much nicer to control.
+ */
+function moveAndCollide(dx, dz) {
+  const r = CONFIG.player.radius;
+  const p = player.position;
+
+  // Helper: does a circle at (x,z) overlap any collider box?
+  const blocked = (x, z) => {
+    for (const c of colliders) {
+      // Closest point on the box to the circle centre
+      const cx = clamp(x, c.minX, c.maxX);
+      const cz = clamp(z, c.minZ, c.maxZ);
+      const ddx = x - cx, ddz = z - cz;
+      if (ddx * ddx + ddz * ddz < r * r) return true;
+    }
+    return false;
+  };
+
+  // Keep the player inside the world bounds.
+  const nx = clamp(p.x + dx, CONFIG.world.minX, CONFIG.world.maxX);
+  const nz = clamp(p.z + dz, CONFIG.world.minZ, CONFIG.world.maxZ);
+
+  // Try both axes together; if that fails, try each axis separately (slide).
+  if (!blocked(nx, nz)) { p.x = nx; p.z = nz; return; }
+  if (!blocked(nx, p.z)) { p.x = nx; return; }
+  if (!blocked(p.x, nz)) { p.z = nz; return; }
+  // Fully blocked: do nothing.
+}
+
+/** Update the walking animation, or the idle breathing when still. */
+function animateCharacter(dt) {
+  const P = playerParts;
+  if (!P) return;
+
+  // Speed 0..1 tells us how much to blend between idle and a full stride.
+  const maxSpeed = CONFIG.player.runSpeed;
+  const t = clamp(playerSpeed / maxSpeed, 0, 1);
+
+  // The walk cycle advances with speed, so steps keep pace with movement.
+  walkCycle += dt * (4.2 + t * 6.0) * (playerSpeed > 0.1 ? 1 : 0);
+  idleTime += dt;
+
+  // --- Legs -------------------------------------------------------------
+  // A sine wave each, opposite phase = one leg forward while the other is back.
+  const stride = 0.15 + t * 0.62;
+  P.legL.rotation.x = Math.sin(walkCycle) * stride;
+  P.legR.rotation.x = Math.sin(walkCycle + Math.PI) * stride;
+
+  // --- Arms swing opposite to the legs ---------------------------------
+  P.armL.rotation.x = Math.sin(walkCycle + Math.PI) * stride * 0.8;
+  P.armR.rotation.x = Math.sin(walkCycle) * stride * 0.8;
+  // A little outward flare so the arms do not clip into the body.
+  P.armL.rotation.z = 0.10 + Math.sin(idleTime * 1.4) * 0.02;   // breathing
+  P.armR.rotation.z = -0.10 - Math.sin(idleTime * 1.4) * 0.02;
+
+  // --- Body bob ---------------------------------------------------------
+  // Two bobs per stride (one per footfall), plus the idle breathing rise.
+  const moving = playerSpeed > 0.1;
+  const bob = moving
+    ? Math.abs(Math.sin(walkCycle)) * (0.035 + t * 0.075)
+    : Math.sin(idleTime * 1.4) * 0.018;      // gentle idle breathing
+  P.body.position.y = bob;
+
+  // A slight side-to-side sway while walking, and a forward lean when running.
+  P.body.rotation.z = moving ? Math.sin(walkCycle) * (0.02 + t * 0.05) : 0;
+  P.torso.rotation.x = moving ? t * 0.13 : Math.sin(idleTime * 1.4) * 0.012;
+
+  // --- Head: look around a little when idle ----------------------------
+  if (moving) {
+    P.head.rotation.y = damp(P.head.rotation.y, 0, 6, dt);
+    P.head.rotation.x = 0;
+  } else {
+    // A lazy, slow glance to one side and back.
+    P.head.rotation.y = Math.sin(idleTime * 0.55) * 0.22;
+    P.head.rotation.x = Math.sin(idleTime * 1.4) * 0.02;
+  }
+
+  // --- Hat: lags behind the head slightly, which reads as weight -------
+  P.hat.rotation.z = Math.sin(walkCycle * 2) * (0.01 + t * 0.03) - P.body.rotation.z * 0.5;
+
+  // --- Scarf tail flutters ---------------------------------------------
+  // More flutter at higher speed.
+  P.scarfTail.rotation.x = -0.15 - t * 0.75 + Math.sin(idleTime * 6 + walkCycle) * (0.05 + t * 0.22);
+  P.scarfTail.rotation.z = Math.sin(idleTime * 4.3) * (0.04 + t * 0.16);
+}
+
+/** Read all input sources and produce movement + camera rotation. */
+function updatePlayer(dt) {
+  if (!player || uiState.paused) return;
+
+  // --- Gather directional input ----------------------------------------
+  let f = 0, s = 0;
+
+  if (!anyOverlayOpen()) {
+    const kb = readKeyboard();
+    f = kb.f;
+    s = kb.s;
+
+    // Add the joystick (clamped so diagonal movement is never faster).
+    if (joy.active) {
+      // The joystick's y points DOWN the screen, so push-up = forward.
+      f = clamp(f - joy.y, -1, 1);
+      s = clamp(s + joy.x, -1, 1);
+    }
+  }
+
+  const mag = Math.hypot(f, s);
+  if (mag > 1) { f /= mag; s /= mag; }    // normalise diagonals
+
+  // --- Turn input into world-space direction ---------------------------
+  // "Forward" is the direction the CAMERA is facing, which is what players
+  // expect from a third-person game.
+  const camForwardX = -Math.sin(camYaw);
+  const camForwardZ = -Math.cos(camYaw);
+  const camRightX = Math.cos(camYaw);
+  const camRightZ = -Math.sin(camYaw);
+
+  const dirX = camForwardX * f + camRightX * s;
+  const dirZ = camForwardZ * f + camRightZ * s;
+
+  const targetSpeed = input.run ? CONFIG.player.runSpeed : CONFIG.player.walkSpeed;
+  const hasInput = mag > 0.02;
+
+  // --- Smooth the speed so the character does not start instantly ------
+  const wantSpeed = hasInput ? targetSpeed * Math.min(1, mag) : 0;
+  playerSpeed = damp(playerSpeed, wantSpeed, CONFIG.player.accel, dt);
+  if (playerSpeed < 0.05) playerSpeed = 0;
+
+  isMoving = playerSpeed > 0.6;
+
+  if (hasInput) {
+    // Turn the character smoothly toward the direction of travel.
+    const targetYaw = Math.atan2(dirX, dirZ);
+    // Shortest way around the circle, so we never spin the long way.
+    let diff = targetYaw - playerYaw;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    playerYaw += diff * clamp(CONFIG.player.turnSmoothing * dt, 0, 1);
+
+    // Move in the direction we are facing (not the raw input direction),
+    // which makes turning feel like it has weight.
+    const moveX = Math.sin(playerYaw) * playerSpeed * dt;
+    const moveZ = Math.cos(playerYaw) * playerSpeed * dt;
+    moveAndCollide(moveX, moveZ);
+  }
+
+  // Apply the facing direction to the model. (Note: we add PI because the
+  // character is modelled looking down its own +z, matching atan2(x, z).)
+  player.rotation.y = playerYaw;
+
+  animateCharacter(dt);
+
+  // --- Where is the player standing? ----------------------------------
+  updateCurrentPlace();
+}
+
+/* ==========================================================================
+   SECTION 12 — INTERACTION
+   --------------------------------------------------------------------------
+   Every frame we look for the nearest interactable within its radius. If one
+   is close, we show the prompt. Pressing E runs its action.
+   ========================================================================== */
+let nearest = null;
+
+function updateInteraction() {
+  if (!player || uiState.paused) { setPrompt(null); return; }
+
+  let best = null;
+  let bestDist = Infinity;
+
+  for (const it of interactables) {
+    const dx = player.position.x - it.x;
+    const dz = player.position.z - it.z;
+    const d = Math.hypot(dx, dz);
+    if (d < it.radius && d < bestDist) { best = it; bestDist = d; }
+  }
+
+  nearest = best;
+  setPrompt(best);
+
+  // Enable/disable the mobile button so it looks unavailable when it is.
+  const btn = document.getElementById('btn-interact');
+  btn.disabled = !best;
+
+  if (input.interactPressed) {
+    input.interactPressed = false;
+    if (best) triggerInteraction(best);
+  }
+}
+
+/**
+ * triggerInteraction(item)
+ * Wraps whatever the item does in the fade transition, so entering a
+ * building feels like walking through a door rather than a hard cut.
+ */
+function triggerInteraction(item) {
+  // Freeze movement while the door "opens".
+  uiState.paused = true;
+
+  fadeToItem(item.label, () => {
+    item.action();
+    // Un-pause; if an overlay opened, movement stays blocked by the overlay
+    // check instead, which is what we want.
+    uiState.paused = false;
+  });
+}
+
+/** The fade-to-black transition. */
+function fadeToItem(label, atBlack) {
+  const fade = document.getElementById('fade');
+  const word = document.getElementById('fade-word');
+  word.textContent = label;
+  fade.classList.add('on');
+
+  // Halfway through the fade (when the screen is dark) we do the swap.
+  setTimeout(() => {
+    atBlack();
+    // Then fade back out, unless an overlay is now covering the screen —
+    // in that case stay dark until the overlay closes (handled in closeOverlay).
+    setTimeout(() => {
+      if (!anyOverlayOpen()) fade.classList.remove('on');
+    }, 140);
+  }, 430);
+}
+
+/* ==========================================================================
+   SECTION 13 — UI: OVERLAYS, THE MAP, THE HUD
+   ========================================================================== */
+
+const uiState = {
+  paused: false,       // true while a transition is running
+  soundOn: true,
+  topOverlay: null,    // which overlay is currently open
+};
+
+/** Is any full-screen overlay visible right now? */
+function anyOverlayOpen() {
+  return document.querySelectorAll('.overlay.show').length > 0;
+}
+
+function openOverlay(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('show');
+  uiState.topOverlay = id;
+  // Keep the fade dark while an overlay is up, so it does not flash the town.
+  document.getElementById('fade').classList.remove('on');
+}
+
+function closeOverlay(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('show');
+  if (uiState.topOverlay === id) uiState.topOverlay = null;
+  // If that was the last one, make sure we are not left behind a dark screen.
+  if (!anyOverlayOpen()) document.getElementById('fade').classList.remove('on');
+}
+
+function closeAllOverlays() {
+  document.querySelectorAll('.overlay.show').forEach((el) => el.classList.remove('show'));
+  uiState.topOverlay = null;
+  document.getElementById('fade').classList.remove('on');
+}
+
+/** The floating "Press E to enter…" hint. */
+function setPrompt(item) {
+  const el = document.getElementById('prompt');
+  const text = document.getElementById('prompt-text');
+  if (!item) { el.classList.remove('show'); return; }
+  text.textContent = item.label;
+  el.classList.add('show');
+}
+
+/** The bottom-left card telling you where you are. */
+let lastPlace = null;
+function updateCurrentPlace() {
+  if (!player) return;
+  // Find the closest named place within a generous radius.
+  let best = null, bestD = 22;
+  for (const p of places) {
+    const d = Math.hypot(player.position.x - p.x, player.position.z - p.z);
+    if (d < bestD) { best = p; bestD = d; }
+  }
+  const name = best ? best.name : 'Etriente';
+  if (name === lastPlace) return;
+  lastPlace = name;
+  document.getElementById('place-name').textContent = name;
+  document.getElementById('place-note').textContent = best ? best.note : 'Wander freely. The sea is south of the square.';
+}
+
+/* --------------------------------------------------------------------------
+   A SMALL NOTICE SHEET
+   The cozy corners (benches, café tables, the sunbed) become real sitting
+   spots with the Cozy Mode toolbox in Stage 2. Until then, pressing E there
+   opens this friendly note instead of doing nothing at all.
+   -------------------------------------------------------------------------- */
+function showNotice(title, sub, text, badge = '🪑') {
+  document.getElementById('notice-badge').textContent = badge;
+  document.getElementById('notice-title').textContent = title;
+  document.getElementById('notice-sub').textContent = sub;
+  document.getElementById('notice-text').textContent = text;
+  openOverlay('ov-notice');
+}
+
+/* --------------------------------------------------------------------------
+   THE BLOG OVERLAYS
+   Driven entirely by BLOG_CONTENT. Each card can be clicked to expand its
+   optional `body` text.
+   -------------------------------------------------------------------------- */
+function openBlogSection(key) {
+  const data = BLOG_CONTENT[key];
+  if (!data) { console.warn('No BLOG_CONTENT entry for', key); return; }
+
+  document.getElementById('blog-badge').textContent = data.emoji || '📖';
+  document.getElementById('blog-title').textContent = data.name;
+  document.getElementById('blog-desc').textContent = data.desc || '';
+
+  const body = document.getElementById('blog-body');
+  body.innerHTML = '';
+
+  if (!data.posts || !data.posts.length) {
+    const note = document.createElement('p');
+    note.className = 'empty-note';
+    note.textContent = 'Nothing here yet — add posts to BLOG_CONTENT in index.html.';
+    body.appendChild(note);
+  } else {
+    for (const post of data.posts) {
+      const card = document.createElement('article');
+      card.className = 'post';
+
+      const date = document.createElement('div');
+      date.className = 'post-date';
+      date.textContent = post.date || '';
+
+      const title = document.createElement('h3');
+      title.className = 'post-title';
+      title.textContent = post.title || 'Untitled';
+
+      const excerpt = document.createElement('p');
+      excerpt.className = 'post-excerpt';
+      excerpt.textContent = post.excerpt || '';
+
+      card.appendChild(date);
+      card.appendChild(title);
+      card.appendChild(excerpt);
+
+      // If there is a longer body, make the card expandable.
+      if (post.body) {
+        const full = document.createElement('div');
+        full.className = 'post-body';
+        // Preserve the author's line breaks without allowing HTML injection.
+        full.textContent = post.body;
+        full.style.whiteSpace = 'pre-wrap';
+        card.appendChild(full);
+
+        card.addEventListener('click', () => card.classList.toggle('open'));
+        card.style.cursor = 'pointer';
+      }
+
+      body.appendChild(card);
+    }
+  }
+
+  openOverlay('ov-blog');
+  // Reset the scroll position to the top each time.
+  body.scrollTop = 0;
+}
+
+/* --------------------------------------------------------------------------
+   THE 2D TOWN MAP
+   --------------------------------------------------------------------------
+   The map is drawn on a canvas in the same top-down space as the world, and
+   the clickable pins are ordinary HTML buttons positioned on top. That way we
+   get real hover/focus states and accessible labels for free.
+   -------------------------------------------------------------------------- */
+const MAP_VIEW = { minX: -80, maxX: 80, minZ: -76, maxZ: 56 };
+
+/** Convert world coordinates to pixel coordinates on a given canvas. */
+function worldToMap(x, z, w, h) {
+  const u = (x - MAP_VIEW.minX) / (MAP_VIEW.maxX - MAP_VIEW.minX);
+  const v = (z - MAP_VIEW.minZ) / (MAP_VIEW.maxZ - MAP_VIEW.minZ);
+  return { px: u * w, py: v * h, u, v };
+}
+
+/** Draw the top-down town map onto a canvas context. */
+function drawTownMap(ctx, w, h, opts = {}) {
+  const { showPlayer = false } = opts;
+
+  // --- Water at the bottom ---------------------------------------------
+  const seaY = worldToMap(0, 52, w, h).py;
+  const g = ctx.createLinearGradient(0, seaY, 0, h);
+  g.addColorStop(0, '#BEE3EE');
+  g.addColorStop(1, '#8FCBDD');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, seaY, w, h - seaY);
+
+  // --- Land -------------------------------------------------------------
+  ctx.fillStyle = '#B7CBA4';
+  ctx.fillRect(0, 0, w, seaY);
+
+  // --- Beach ------------------------------------------------------------
+  const beachTop = worldToMap(0, 47, w, h).py;
+  ctx.fillStyle = '#F2DFB6';
+  ctx.fillRect(0, beachTop, w, seaY - beachTop);
+
+  // --- Cobbled streets --------------------------------------------------
+  ctx.fillStyle = '#E2D6C0';
+  const street = (cx, cz, sw, sd) => {
+    const a = worldToMap(cx - sw / 2, cz - sd / 2, w, h);
+    const b = worldToMap(cx + sw / 2, cz + sd / 2, w, h);
+    ctx.fillRect(a.px, a.py, b.px - a.px, b.py - a.py);
+  };
+  ctx.fillStyle = '#DFD2BA';
+  street(0, 24, 16, 40);      // avenue to the sea
+  street(0, 0, 70, 12);       // cross street
+  street(-30, 8, 12, 46);     // west street
+  street(30, 8, 12, 46);      // east street
+  street(-4, -34, 70, 8);     // back lane
+
+  // --- The piazza -------------------------------------------------------
+  const c = worldToMap(0, 0, w, h);
+  const scale = w / (MAP_VIEW.maxX - MAP_VIEW.minX);
+  ctx.fillStyle = '#EFE1C6';
+  ctx.beginPath();
+  ctx.arc(c.px, c.py, 21 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#CDBCA0';
+  ctx.lineWidth = Math.max(1.5, scale * 0.8);
+  ctx.stroke();
+
+  // --- Buildings --------------------------------------------------------
+  for (const b of mapBuildings) {
+    const p = worldToMap(b.x, b.z, w, h);
+    const bw = b.w * scale, bd = b.d * scale;
+    ctx.save();
+    ctx.translate(p.px, p.py);
+    ctx.rotate(-b.rot);
+    ctx.fillStyle = b.color;
+    ctx.fillRect(-bw / 2, -bd / 2, bw, bd);
+    ctx.strokeStyle = 'rgba(74,59,49,0.45)';
+    ctx.lineWidth = Math.max(1, scale * 0.6);
+    ctx.strokeRect(-bw / 2, -bd / 2, bw, bd);
+    // A little roof line so it reads as a house on a map
+    ctx.fillStyle = 'rgba(194,103,74,0.55)';
+    ctx.fillRect(-bw / 2, -bd / 2, bw, Math.max(2, bd * 0.28));
+    ctx.restore();
+  }
+
+  // --- The pier ---------------------------------------------------------
+  ctx.fillStyle = '#C39A6C';
+  const p1 = worldToMap(-39.9, 57, w, h);
+  const p2 = worldToMap(-36.1, 105, w, h);
+  ctx.fillRect(p1.px, p1.py, p2.px - p1.px, p2.py - p1.py);
+
+  // --- Trees (small dots) ----------------------------------------------
+  ctx.fillStyle = 'rgba(127,160,116,0.85)';
+  for (const t of mapTrees) {
+    const p = worldToMap(t.x, t.z, w, h);
+    ctx.beginPath();
+    ctx.arc(p.px, p.py, Math.max(2.5, scale * 1.6 * (t.s || 1)), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // --- The "you are here" marker ---------------------------------------
+  if (showPlayer && player) {
+    const p = worldToMap(player.position.x, player.position.z, w, h);
+    ctx.save();
+    ctx.translate(p.px, p.py);
+    // A star: ten alternating radii.
+    ctx.fillStyle = '#D9453C';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = Math.max(1.5, scale * 0.9);
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const ang = (Math.PI / 5) * i - Math.PI / 2;
+      const r = i % 2 === 0 ? 11 : 4.6;
+      ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// These arrays are filled as the town is built, so the map always matches
+// the real world without any duplicated coordinates.
+const mapBuildings = [];
+const mapTrees = [];
+
+/** Build the clickable pins on the full-screen map. */
+function buildMapPins() {
+  const stage = document.getElementById('map-stage');
+  // Remove any pins from a previous build.
+  stage.querySelectorAll('.map-pin').forEach((n) => n.remove());
+
+  const pinTargets = [
+    { id: 'mapboard', name: 'Town Map Board', emoji: '🗺️', x: 0, z: -15, section: null,
+      info: 'The board here in the square. It shows the whole town and lets you quick-travel.' },
+    ...mapBuildings.map((b) => ({
+      id: b.id, name: b.name, emoji: b.emoji, x: b.doorX, z: b.doorZ, section: b.section,
+      info: b.info || b.desc || '',
+    })),
+    { id: 'beach', name: 'The Beach', emoji: '🏖️', x: 0, z: 62, section: null,
+      info: 'Sand, shallow water and a sunbed. A later stage adds beach furniture here.' },
+    { id: 'pier', name: 'The Pier', emoji: '⛵', x: -38, z: 80, section: null,
+      info: 'A wooden pier over the water with little painted boats moored alongside.' },
+    { id: 'fountain', name: 'The Fountain', emoji: '⛲', x: 0, z: 0, section: null,
+      info: 'The middle of the piazza. Look around: every blog building is a short walk away.' },
+  ];
+
+  for (const t of pinTargets) {
+    const { u, v } = worldToMap(t.x, t.z, 1, 1);
+
+    const btn = document.createElement('button');
+    btn.className = 'map-pin';
+    btn.style.left = (u * 100) + '%';
+    btn.style.top = (v * 100) + '%';
+    btn.innerHTML =
+      `<span class="pin-dot" style="background:${t.section ? '#A9603F' : '#7FA074'}">${t.emoji}</span>` +
+      `<span class="pin-tag">${t.name}</span>`;
+
+    btn.addEventListener('click', () => showMapInfo(t));
+    stage.appendChild(btn);
+    t._el = btn;
+  }
+}
+
+/** Fill the info panel under the map when a pin is clicked. */
+let mapSelected = null;
+function showMapInfo(t) {
+  mapSelected = t;
+  const info = document.getElementById('map-info');
+  info.innerHTML = '';
+
+  const title = document.createElement('strong');
+  title.textContent = `${t.emoji} ${t.name}`;
+
+  const text = document.createElement('div');
+  text.textContent = t.info;
+
+  info.appendChild(title);
+  info.appendChild(text);
+
+  // Directions + a quick-travel button.
+  if (player) {
+    const dx = t.x - player.position.x;
+    const dz = t.z - player.position.z;
+    const dist = Math.round(Math.hypot(dx, dz));
+    const dir = compassDirection(dx, dz);
+
+    const meta = document.createElement('div');
+    meta.style.marginTop = '.4rem';
+    meta.style.color = '#7C6A5C';
+    meta.textContent = dist < 3
+      ? 'You are already here.'
+      : `About ${dist} metres away, to the ${dir}.`;
+    info.appendChild(meta);
+  }
+
+  const go = document.createElement('div');
+  go.className = 'go';
+
+  const travel = document.createElement('button');
+  travel.className = 'btn';
+  travel.style.fontSize = '.85rem';
+  travel.style.padding = '.5rem 1.1rem';
+  travel.textContent = 'Quick-travel here';
+  travel.addEventListener('click', () => quickTravelTo(t));
+  go.appendChild(travel);
+
+  if (t.section) {
+    const read = document.createElement('button');
+    read.className = 'btn ghost';
+    read.style.fontSize = '.85rem';
+    read.style.padding = '.5rem 1.1rem';
+    read.textContent = 'Read these posts';
+    read.addEventListener('click', () => openBlogSection(t.section));
+    go.appendChild(read);
+  }
+
+  info.appendChild(go);
+}
+
+/** Turn a direction into a friendly compass word. */
+function compassDirection(dx, dz) {
+  // Note: -z is north in this world.
+  const angle = Math.atan2(dx, -dz);            // 0 = north, +/-PI = south
+  const deg = (angle * 180) / Math.PI;
+  const a = ((deg % 360) + 360) % 360;
+  if (a < 22.5 || a >= 337.5) return 'north';
+  if (a < 67.5) return 'north-east';
+  if (a < 112.5) return 'east';
+  if (a < 157.5) return 'south-east';
+  if (a < 202.5) return 'south';
+  if (a < 247.5) return 'south-west';
+  if (a < 292.5) return 'west';
+  return 'north-west';
+}
+
+/** Teleport the player to a map pin, with a fade so it is not jarring. */
+function quickTravelTo(t) {
+  closeAllOverlays();
+  const fade = document.getElementById('fade');
+  const word = document.getElementById('fade-word');
+  word.textContent = 'Walking to ' + t.name;
+  fade.classList.add('on');
+
+  setTimeout(() => {
+    // Stand a little back from the target so we do not spawn inside it.
+    player.position.set(t.x, 0, t.z);
+    // Re-aim the camera behind the player.
+    camYaw = Math.PI;
+    camPitch = 0.22;
+    // Snap the camera so it does not fly across the town.
+    cameraPos.set(t.x, CONFIG.camera.height + 2, t.z + camTargetDistance);
+    cameraLook.set(t.x, CONFIG.camera.lookAtHeight, t.z);
+    setTimeout(() => fade.classList.remove('on'), 260);
+  }, 430);
+}
+
+/** The mini map in the corner: a small, always-on version of the same map. */
+function drawMinimap() {
+  const canvas = document.getElementById('minimap');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  drawTownMap(ctx, w, h, { showPlayer: true });
+}
+
+/* --------------------------------------------------------------------------
+   WIRING UP THE BUTTONS
+   -------------------------------------------------------------------------- */
+function setupUI() {
+  // Any element with data-close="overlayId" closes that overlay.
+  document.querySelectorAll('[data-close]').forEach((btn) => {
+    btn.addEventListener('click', () => closeOverlay(btn.dataset.close));
+  });
+
+  // Clicking the dark backdrop (but not the sheet itself) closes the overlay.
+  document.querySelectorAll('.overlay').forEach((ov) => {
+    ov.addEventListener('click', (e) => { if (e.target === ov) closeOverlay(ov.id); });
+  });
+
+  document.getElementById('btn-map').addEventListener('click', () => openOverlay('ov-map'));
+  document.getElementById('btn-help').addEventListener('click', () => openOverlay('ov-help'));
+
+  // The sound button is a stub for now: the Web Audio engine arrives in a
+  // later stage, so this just tracks the on/off state and reflects it.
+  const soundBtn = document.getElementById('btn-sound');
+  soundBtn.addEventListener('click', () => {
+    uiState.soundOn = !uiState.soundOn;
+    soundBtn.textContent = uiState.soundOn ? '🔈' : '🔇';
+    soundBtn.classList.toggle('on', uiState.soundOn);
+  });
+  soundBtn.classList.add('on');
+}
+
+/* ==========================================================================
+   SECTION 14 — BUILDING THE WHOLE TOWN
+   --------------------------------------------------------------------------
+   The builders are listed as "steps" so the loading screen can show real
+   progress and the browser can paint between them. Nothing here is skipped.
+   ========================================================================== */
+function townSteps() {
+  return [
+    { label: 'Painting the sky…',        run: () => { buildSky(); } },
+    { label: 'Pouring the sea…',         run: () => { buildSea(); } },
+    { label: 'Laying the cobbles…',      run: () => { buildGround(); } },
+    { label: 'Building the seafront…',   run: () => { buildSeafront(); } },
+    { label: 'Raising the hills…',       run: () => { buildHills(); } },
+    { label: 'Filling the fountain…',    run: () => { buildFountain(0, 0); } },
+    { label: 'Putting up the map board…',run: () => { buildMapBoard(0, -15); } },
+
+    // ---- The five blog buildings --------------------------------------
+    { label: 'Opening the bookstore…', run: () => {
+      buildBuilding({
+        x: 0, z: 24, rotationY: Math.PI,      // faces south, into the square
+        width: 14, depth: 11, height: 9,
+        wallColor: 0xF3E2C6, roofColor: CONFIG.colors.roofTerra,
+        shutterColor: 0x6E8F5E,
+        signText: 'The Dog-Eared Page', signSub: 'bookstore · reading & writing',
+        signAccent: 0xC97B5A,
+        roofStyle: 'gable', floors: 2, balcony: true, lantern: true,
+        onEnter: () => openBlogSection('bookstore'),
+        id: 'bookstore', emoji: '📚',
+      });
+    } },
+
+    { label: 'Setting up the art studio…', run: () => {
+      buildBuilding({
+        x: -30, z: 16, rotationY: Math.PI * 0.72,   // angled toward the square
+        width: 12, depth: 10, height: 8,
+        wallColor: 0xF7D9E2, roofColor: CONFIG.colors.roofRose,
+        shutterColor: 0xFFFFFF,
+        signText: 'Studio Luciola', signSub: 'art studio · animation & design',
+        signAccent: 0xEFB6C1,
+        roofStyle: 'flat', floors: 2, awning: true, veranda: false,
+        onEnter: () => openBlogSection('artstudio'),
+        id: 'artstudio', emoji: '🎨',
+      });
+    } },
+
+    { label: 'Spinning a record…', run: () => {
+      buildBuilding({
+        x: 30, z: 16, rotationY: -Math.PI * 0.72,
+        width: 12, depth: 10, height: 8.5,
+        wallColor: 0xE7EFDC, roofColor: 0xB4744F,
+        shutterColor: 0xD9705A,
+        signText: 'Disco Marea', signSub: 'record store · music',
+        signAccent: 0xA9C6A0,
+        roofStyle: 'gable', floors: 2, awning: true, balcony: true,
+        onEnter: () => openBlogSection('recordstore'),
+        id: 'recordstore', emoji: '🎵',
+      });
+    } },
+
+    { label: 'Shelving the library…', run: () => {
+      buildBuilding({
+        x: -34, z: -16, rotationY: Math.PI * 0.28,
+        width: 15, depth: 12, height: 10,
+        wallColor: 0xE4EEF8, roofColor: 0x7FA3C4,
+        shutterColor: 0xF2F6FA,
+        signText: 'Biblioteca Azzurra', signSub: 'library · learning',
+        signAccent: 0xA8CEF0,
+        roofStyle: 'dome', floors: 3, lantern: false, balcony: true,
+        onEnter: () => openBlogSection('library'),
+        id: 'library', emoji: '🎓',
+      });
+    } },
+
+    { label: 'Lighting the little home…', run: () => {
+      buildBuilding({
+        x: 34, z: -16, rotationY: -Math.PI * 0.28,
+        width: 12, depth: 10, height: 7.5,
+        wallColor: 0xFBF0D2, roofColor: 0xC98A5A,
+        shutterColor: 0x8FAE7E,
+        signText: 'Casa Piccola', signSub: 'little home · diary & memories',
+        signAccent: 0xF6DE9C,
+        roofStyle: 'gable', floors: 2, balcony: true, lantern: true,
+        onEnter: () => openBlogSection('home'),
+        id: 'home', emoji: '🏡',
+      });
+    } },
+
+    // ---- Decorating ---------------------------------------------------
+    { label: 'Planting the lemon trees…', run: () => {
+      // Potted plants along the buildings
+      buildPot(-8, 19, 1.1, false);
+      buildPot(8, 19, 1.1, true);
+      buildPot(-21, 10, 1.0, false);
+      buildPot(21, 10, 1.0, true);
+      buildPot(-18, -8, 1.0, false);
+      buildPot(18, -8, 1.0, true);
+      buildPot(0, 38, 1.15, true);
+      buildPot(-14, 34, 1.0, false);
+      buildPot(14, 34, 1.0, false);
+      buildPot(-44, 20, 1.0, true);
+      buildPot(44, 22, 1.0, false);
+
+      // A proper lemon-tree courtyard, hidden behind the library.
+      const cy = -30, cxx = -52;
+      buildPot(cxx - 3, cy - 3, 1.3, true);
+      buildPot(cxx + 3, cy - 3, 1.3, true);
+      buildPot(cxx - 3, cy + 3, 1.3, true);
+      buildPot(cxx + 3, cy + 3, 1.3, true);
+      buildBench(cxx, cy, 0);
+      addPlace('Cortile dei Limoni', 'A quiet courtyard of lemon trees. Nobody comes here.', cxx, cy, '#F4D64A');
+      addInteractable(cxx, cy + 1.4, 3.0, 'Rest on the courtyard bench',
+        () => showNotice('Cortile dei Limoni', 'A bench under the lemon trees.',
+          'Sitting down, and the whole Cozy Mode toolbox — Pomodoro timer, session log, to-do list, journal and ambient sound — arrives in Stage 2.'),
+        'rest');
+
+      mapTrees.push({ x: cxx - 3, z: cy - 3, s: 1.3 }, { x: cxx + 3, z: cy - 3, s: 1.3 },
+                    { x: cxx - 3, z: cy + 3, s: 1.3 }, { x: cxx + 3, z: cy + 3, s: 1.3 });
+    } },
+
+    { label: 'Planting the gardens…', run: () => {
+      // Trees around the square and streets
+      const treeSpots = [
+        [-13, 34, 1.1], [13, 34, 1.1], [-13, 14, 1.0], [13, 14, 1.0],
+        [-24, -6, 1.2], [24, -6, 1.2], [-46, -22, 1.25], [48, -24, 1.2],
+        [-46, 24, 1.1], [48, 26, 1.1], [-14, -46, 1.2], [16, -46, 1.15],
+        [-58, -6, 1.15], [58, -8, 1.1], [-62, 30, 1.1], [62, 32, 1.05],
+      ];
+      for (const [x, z, s] of treeSpots) {
+        buildTree(x, z, s, Math.random() > 0.5 ? 1 : 0);
+        mapTrees.push({ x, z, s });
+      }
+      // Cypresses: tall and slim, dotted along the edges.
+      const cyps = [[-20, -28, 1.0], [20, -28, 0.9], [-56, 14, 1.1], [56, 16, 1.0],
+                    [-40, -40, 1.05], [42, -42, 1.0], [0, -56, 1.1], [-70, -20, 1.0], [70, -22, 1.0]];
+      for (const [x, z, s] of cyps) {
+        buildCypress(x, z, s);
+        mapTrees.push({ x, z, s: 0.7 });
+      }
+
+      // Benches in the square and gardens
+      buildBench(-6, 26, 0);
+      buildBench(6, 26, 0);
+      buildBench(-16, -18, Math.PI / 2);
+      buildBench(16, -18, -Math.PI / 2);
+      buildBench(-50, -16, 0.4);
+      buildBench(52, -18, -0.4);
+
+      addPlace('Giardini', 'The little gardens at the edge of town.', -50, -20, '#A9C6A0');
+    } },
+
+    { label: 'Hanging the lights…', run: () => {
+      // Lamps around the piazza
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + 0.4;
+        buildLamp(Math.cos(a) * 17.5, Math.sin(a) * 17.5);
+      }
+      buildLamp(-24, 30); buildLamp(24, 30);
+      buildLamp(-30, -26); buildLamp(30, -26);
+      buildLamp(0, 40);
+
+      // String lights across the square, from building to building
+      buildStringLights(-7, 20, 7, 20, 4.6, 1.0, 26);
+      buildStringLights(-22, 12, -10, 18, 4.4, 0.8, 18);
+      buildStringLights(22, 12, 10, 18, 4.4, 0.8, 18);
+      buildStringLights(-6, 30, 6, 30, 4.8, 0.9, 20);
+
+      // Laundry lines between the buildings — very Italian.
+      buildLaundry(-14, 18, -14, 28, 4.6);
+      buildLaundry(14, 18, 14, 28, 4.4);
+      buildLaundry(-40, -20, -40, -8, 4.8);
+      buildLaundry(40, -20, 40, -8, 4.6);
+    } },
+
+    { label: 'Mooring the boats…', run: () => {
+      buildPier();
+      buildBoats();
+    } },
+
+    { label: 'Waking the cats…', run: () => {
+      // Two cats and a few birds: ambient life. They are animated in the loop.
+      spawnCat(-9, 21);
+      spawnCat(12, -9);
+      spawnBirds(8);
+    } },
+
+    { label: 'Arranging the cafés…', run: () => {
+      // Three little seaside cafés with tables and chairs.
+      cafeAt(-46, 30, 0.6);
+      cafeAt(48, 32, -0.6);
+      cafeAt(-16, 40, 0.15);
+      addPlace('Caffè', 'Seaside cafés with tables. A good place to stop.', -46, 30, '#F7CBA6');
+    } },
+
+    { label: 'Finding the quiet corners…', run: () => {
+      // A quiet alley behind the square with a bench.
+      const ax = 44, az = -34;
+      buildBench(ax, az, -Math.PI / 2);
+      // A little archway over the alley
+      const arch = new THREE.Group();
+      const post1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 4, 0.5), toon(0xD8C8AE));
+      post1.position.set(ax - 3, 2, az - 2);
+      post1.castShadow = true;
+      const post2 = post1.clone(); post2.position.x = ax + 3;
+      const top = new THREE.Mesh(new THREE.BoxGeometry(7, 0.7, 1.2), toon(0xCBAF8E));
+      top.position.set(ax, 4.2, az - 2);
+      top.castShadow = true;
+      arch.add(post1, post2, top);
+      // A lantern under the arch
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 6), toon(0xFFE9B0, { emissive: 0.9 }));
+      lamp.position.set(ax, 3.5, az - 2);
+      lamp.userData.noOutline = true;
+      arch.add(lamp);
+      const pl = new THREE.PointLight(0xFFCE8A, 7, 14, 2);
+      pl.position.set(ax, 3.4, az - 2);
+      arch.add(pl);
+      scene.add(arch);
+      addOutline(arch, 0.025);
+      addCollider(ax - 3, az - 2, 0.4, 0.4);
+      addCollider(ax + 3, az - 2, 0.4, 0.4);
+
+      addPlace('Vicolo Tranquillo', 'A quiet alley with a bench. Nothing happens here, pleasantly.', ax, az, '#CBBBA0');
+      addInteractable(ax, az, 2.6, 'Sit on the alley bench',
+        () => showNotice('Vicolo Tranquillo', 'A bench in the shade of the arch.',
+          'Sitting down — with the Pomodoro timer, ambient sound and the rest of the Cozy Mode panel — arrives in Stage 2.'),
+        'rest');
+
+      // A rooftop terrace: a raised platform you can walk up to via a ramp,
+      // looking back over the town toward the sea.
+      buildRooftopTerrace(58, 6);
+    } },
+
+    { label: 'Making the character…', run: () => {
+      buildCharacter();
+      // Snap the camera to the player so the first frame is not a swoop.
+      cameraPos.set(player.position.x, CONFIG.camera.height + 2, player.position.z + camTargetDistance);
+      cameraLook.set(player.position.x, CONFIG.camera.lookAtHeight, player.position.z);
+    } },
+  ];
+}
+
+/* --------------------------------------------------------------------------
+   SMALL TOWN PROPS used by the steps above
+   -------------------------------------------------------------------------- */
+
+/** A seaside café: a counter, an awning, and a few tables with parasols. */
+function cafeAt(x, z, rot) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  g.rotation.y = rot;
+
+  // The café building itself (small, single storey)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(7, 3.4, 4), toon(0xFBF0DC, { map: stuccoTexture(0xFBF0DC) }));
+  body.position.set(0, 1.7, -2);
+  body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(7.6, 0.35, 4.6), toon(CONFIG.colors.roofRose));
+  roof.position.set(0, 3.55, -2);
+  roof.castShadow = true;
+  g.add(roof);
+
+  // Striped awning
+  const awnTex = makeAwningTexture(0xD9705A);
+  awnTex.repeat.set(3, 1);
+  const awning = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.12, 2.6), toon(0xFFFFFF, { map: awnTex }));
+  awning.position.set(0, 2.9, 1.2);
+  awning.rotation.x = 0.16;
+  awning.castShadow = true;
+  g.add(awning);
+
+  // A little sign
+  const { tex, aspect } = signTexture(['Caffè'], {
+    sub: 'espresso · gelato',
+    width: 420, font: '600 64px Caveat, cursive', subFont: '500 26px Quicksand, sans-serif',
+    border: 'rgba(217,112,90,0.6)',
+  });
+  const sign = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 2.4 / aspect),
+    new THREE.MeshToonMaterial({ map: tex, gradientMap: TOON_GRADIENT, transparent: true })
+  );
+  sign.position.set(0, 2.1, 0.05);
+  g.add(sign);
+
+  // Outside: three round tables with parasols and chairs
+  const tableSpots = [[-2.2, 2.6], [0, 3.0], [2.2, 2.6]];
+  for (const [tx, tz] of tableSpots) {
+    // Table top and leg
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.08, 12), toon(0xF7F1E4));
+    top.position.set(tx, 0.72, tz);
+    top.castShadow = true; top.receiveShadow = true;
+    g.add(top);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.7, 8), toon(0x6B5B4A));
+    leg.position.set(tx, 0.36, tz);
+    g.add(leg);
+
+    // Parasol: a pole and a cone
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6), toon(0x8E6842));
+    pole.position.set(tx, 1.3, tz);
+    g.add(pole);
+    const shade = new THREE.Mesh(new THREE.ConeGeometry(1.4, 0.6, 10), toon(pick([0xE88C7D, 0x8FB18A, 0xF2D06B])));
+    shade.position.set(tx, 2.55, tz);
+    shade.castShadow = true;
+    g.add(shade);
+
+    // Two chairs
+    for (const s of [-1, 1]) {
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.42), toon(CONFIG.colors.wood));
+      seat.position.set(tx + s * 0.95, 0.45, tz);
+      seat.castShadow = true;
+      g.add(seat);
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.07), toon(CONFIG.colors.wood));
+      back.position.set(tx + s * 1.14, 0.7, tz);
+      back.castShadow = true;
+      g.add(back);
+      for (const [lx, lz] of [[-0.16, -0.16], [0.16, -0.16], [-0.16, 0.16], [0.16, 0.16]]) {
+        const l = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.45, 0.05), toon(CONFIG.colors.woodDark));
+        l.position.set(tx + s * 0.95 + lx, 0.22, tz + lz);
+        l.userData.noOutline = true;
+        g.add(l);
+      }
+    }
+  }
+
+  scene.add(g);
+  addOutline(g, 0.022);
+
+  // Collision: the building part only, so you can walk between the tables.
+  const cos = Math.abs(Math.cos(rot)), sin = Math.abs(Math.sin(rot));
+  addCollider(x, z - 2, (7 * cos + 4 * sin) / 2, (7 * sin + 4 * cos) / 2);
+
+  // Interaction: sit at a café table (Cozy Mode arrives in Stage 2).
+  addInteractable(x, z + 3.0, 3.2, 'Sit at the café',
+    () => showNotice('Caffè', 'A table by the sea.',
+      'Sitting down here — and the Cozy Mode panel with the Pomodoro timer, session log, to-do list and ambient sound — arrives in Stage 2.'),
+    'rest');
+}
+
+/** A rooftop terrace with a ramp: walk up for a view over the town. */
+function buildRooftopTerrace(x, z) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+
+  // The platform
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(10, 0.5, 10), toon(CONFIG.colors.wood));
+  deck.position.y = 3.2;
+  deck.castShadow = true; deck.receiveShadow = true;
+  g.add(deck);
+
+  // Support pillars
+  for (const [px, pz] of [[-4, -4], [4, -4], [-4, 4], [4, 4], [0, 0]]) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3, 0.4), toon(CONFIG.colors.stone));
+    p.position.set(px, 1.6, pz);
+    p.castShadow = true;
+    g.add(p);
+  }
+
+  // Low railing around three sides
+  const railMat = toon(0x4F4A45);
+  for (const [rx, rz, rw, rd] of [[0, -4.8, 10, 0.12], [-4.8, 0, 0.12, 10], [4.8, 0, 0.12, 10]]) {
+    for (let i = 0; i <= 10; i++) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.9, 0.06), railMat);
+      if (rw > rd) bar.position.set(rx - 4.5 + i * 0.9, 3.9, rz);
+      else bar.position.set(rx, 3.9, rz - 4.5 + i * 0.9);
+      bar.userData.noOutline = true;
+      g.add(bar);
+    }
+    const top = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.08, rd || 0.12), railMat);
+    top.position.set(rx, 4.35, rz);
+    g.add(top);
+  }
+
+  // A potted plant up on the terrace — a reward for climbing.
+  // Coordinates are LOCAL to this group (the 5th argument is the parent),
+  // so no extra collider is registered.
+  buildPot(-3.4, -3.4, 1.0, true, g);
+  addPlace('Terrazza', 'A rooftop terrace with a view over the whole town.', x, z, '#F7CBA6');
+
+  // --- The ramp up -------------------------------------------------------
+  // A long, gently sloping box. Walking up it is handled by the ground
+  // height function below, so the character follows the slope properly.
+  const ramp = new THREE.Mesh(new THREE.BoxGeometry(3, 0.4, 12), toon(CONFIG.colors.stone));
+  ramp.position.set(0, 1.75, 10.5);
+  ramp.rotation.x = -Math.atan2(3.2, 10);
+  ramp.castShadow = true; ramp.receiveShadow = true;
+  g.add(ramp);
+
+  scene.add(g);
+  addOutline(g, 0.02);
+
+  // The terrace footprint is solid at ground level (the pillars).
+  addCollider(x, z, 5.2, 5.2);
+
+  // Remember the ramp and deck so groundHeightAt() can raise the player.
+  ramps.push({ x, z, width: 3, zStart: z + 4, zEnd: z + 16, yTop: 3.45, yBottom: 0 });
+  platforms.push({ x, z, w: 10, d: 10, y: 3.45 });
+}
+
+/** A simple sitting cat: two spheres, ears, and a tail that flicks. */
+const cats = [];
+function spawnCat(x, z) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  const color = pick([0xE8DCC8, 0xB8ADA0, 0xE0B48C]);
+
+  // Body
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.4, 4, 8), toon(color));
+  body.rotation.z = Math.PI / 2;
+  body.position.y = 0.28;
+  body.castShadow = true;
+  g.add(body);
+
+  // Head
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), toon(color));
+  head.position.set(0.36, 0.42, 0);
+  head.castShadow = true;
+  g.add(head);
+
+  // Ears: little cones
+  for (const dz of [-0.1, 0.1]) {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.14, 5), toon(color));
+    ear.position.set(0.36, 0.58, dz);
+    ear.rotation.z = -0.2;
+    ear.userData.noOutline = true;
+    g.add(ear);
+  }
+
+  // Eyes
+  for (const dz of [-0.08, 0.08]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 4), toon(0x3A2C24));
+    eye.position.set(0.53, 0.45, dz);
+    eye.userData.noOutline = true;
+    g.add(eye);
+  }
+
+  // Tail, animated in the loop.
+  const tail = new THREE.Group();
+  tail.position.set(-0.4, 0.3, 0);
+  const tailMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.5, 4, 6), toon(color));
+  tailMesh.position.y = 0.25;
+  tail.add(tailMesh);
+  g.add(tail);
+
+  scene.add(g);
+  addOutline(g, 0.02);
+  cats.push({ group: g, tail, phase: rand(0, Math.PI * 2), blink: rand(2, 6) });
+}
+
+/** A few birds circling overhead. */
+const birds = [];
+function spawnBirds(n) {
+  const birdMat = toon(0x5B4A3A);
+  for (let i = 0; i < n; i++) {
+    const g = new THREE.Group();
+
+    // Each bird is two flat triangles (wings) that flap.
+    const wingGeo = new THREE.BufferGeometry();
+    wingGeo.setAttribute('position', new THREE.Float32BufferAttribute([
+      0, 0, 0, 0.55, 0, -0.16, 0.55, 0, 0.16,
+    ], 3));
+    wingGeo.computeVertexNormals();
+
+    const wl = new THREE.Mesh(wingGeo, new THREE.MeshToonMaterial({ color: 0x5B4A3A, side: THREE.DoubleSide, gradientMap: TOON_GRADIENT }));
+    wl.userData.noOutline = true;
+    const wr = new THREE.Mesh(wingGeo, wl.material);
+    wr.scale.x = -1;
+    wr.userData.noOutline = true;
+    g.add(wl, wr);
+
+    g.userData = { wl, wr, flap: rand(0, Math.PI * 2), speed: rand(0.15, 0.3) };
+    scene.add(g);
+
+    birds.push({
+      group: g, wl, wr,
+      cx: rand(-40, 40), cz: rand(-40, 30), radius: rand(14, 40),
+      y: rand(16, 28), angle: rand(0, Math.PI * 2), speed: rand(0.1, 0.22),
+      flap: rand(0, Math.PI * 2),
+    });
+  }
+}
+
+/* ==========================================================================
+   SECTION 15 — GROUND HEIGHT (so you can walk up the ramp)
+   --------------------------------------------------------------------------
+   The world is mostly flat, which keeps collision simple and fast. The one
+   exception is the rooftop terrace ramp, handled here by returning the
+   surface height at a given position.
+   ========================================================================== */
+const ramps = [];
+const platforms = [];
+
+function groundHeightAt(x, z) {
+  // On a platform?
+  for (const p of platforms) {
+    if (Math.abs(x - p.x) < p.w / 2 && Math.abs(z - p.z) < p.d / 2) return p.y;
+  }
+  // On a ramp?
+  for (const r of ramps) {
+    if (Math.abs(x - r.x) < r.width / 2 && z > r.zStart && z < r.zEnd) {
+      // The ramp runs from zStart (bottom) to zEnd (top).
+      const t = (z - r.zStart) / (r.zEnd - r.zStart);
+      return lerp(r.yBottom, r.yTop, clamp(t, 0, 1));
+    }
+  }
+  return 0;
+}
+
+/* ==========================================================================
+   SECTION 16 — THE MAIN LOOP
+   ========================================================================== */
+
+const clock = new THREE.Clock();
+let minimapTimer = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  // clamp(dt) is important: if the tab is backgrounded for ten seconds, the
+  // next delta would be huge and the character would teleport across the map.
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  // --- The player -------------------------------------------------------
+  updatePlayer(dt);
+
+  // --- Follow the ground (for the ramp) --------------------------------
+  if (player) {
+    const targetY = groundHeightAt(player.position.x, player.position.z);
+    player.position.y = damp(player.position.y, targetY, 12, dt);
+  }
+
+  // --- The camera -------------------------------------------------------
+  updateCamera(dt, isMoving);
+
+  // --- Interaction ------------------------------------------------------
+  updateInteraction();
+
+  // --- Animated scenery -------------------------------------------------
+  if (waterUniforms) waterUniforms.uTime.value = t;
+
+  // Clouds drift slowly east.
+  for (const c of clouds) c.position.x += c.userData.drift * dt * 0.6;
+
+  // Boats bob on the swell and rock gently.
+  for (const b of boats) {
+    b.group.position.y = b.baseY + Math.sin(t * 0.9 + b.phase) * b.amp;
+    b.group.rotation.z = Math.sin(t * 0.7 + b.phase) * b.rotAmp;
+    b.group.rotation.x = Math.cos(t * 0.55 + b.phase) * b.rotAmp * 0.6;
+  }
+
+  // Laundry flutters in the breeze.
+  for (const cloth of laundryItems) {
+    const s = Math.sin(t * 1.6 + cloth.userData.swingPhase);
+    cloth.rotation.z = s * 0.16;
+    cloth.rotation.y = Math.sin(t * 0.9 + cloth.userData.swingPhase) * 0.1;
+  }
+
+  // String light bulbs twinkle very subtly.
+  for (const inst of stringLights) {
+    const bulbs = inst.userData.bulbs;
+    if (!bulbs || inst.instanceColor === undefined) {
+      // InstancedMesh colour needs an instanceColor buffer; we skip per-bulb
+      // colour and instead pulse the whole strand's emissive by scaling it.
+      continue;
+    }
+  }
+
+  // Cats: a slow tail flick and the occasional head turn.
+  for (const c of cats) {
+    c.tail.rotation.z = Math.sin(t * 1.1 + c.phase) * 0.35;
+    c.tail.rotation.x = Math.sin(t * 0.7 + c.phase) * 0.15;
+    // A subtle breathing scale on the whole cat.
+    const breathe = 1 + Math.sin(t * 1.6 + c.phase) * 0.012;
+    c.group.scale.set(breathe, breathe, breathe);
+  }
+
+  // Birds circle and flap.
+  for (const b of birds) {
+    b.angle += b.speed * dt;
+    b.group.position.set(
+      b.cx + Math.cos(b.angle) * b.radius,
+      b.y + Math.sin(b.angle * 2.0) * 1.2,
+      b.cz + Math.sin(b.angle) * b.radius
+    );
+    // Point the bird along its direction of travel.
+    b.group.rotation.y = -b.angle + Math.PI / 2;
+    // Flap: rotate both wings up and down.
+    const flap = Math.sin(t * 9 + b.flap) * 0.75;
+    b.wl.rotation.z = flap;
+    b.wr.rotation.z = -flap;
+  }
+
+  // Fountain water gently rises and falls. (Tiny, but it sells the scene.)
+  if (fountainWater) {
+    fountainWater.position.y = 1.0 + Math.sin(t * 1.3) * 0.025;
+    fountainWater.scale.setScalar(1 + Math.sin(t * 0.9) * 0.006);
+  }
+
+  // --- Refresh the mini map a few times a second, not every frame -------
+  minimapTimer += dt;
+  if (minimapTimer > 0.1) {
+    minimapTimer = 0;
+    if (!anyOverlayOpen()) drawMinimap();
+  }
+
+  renderer.render(scene, camera);
+}
+
+/* ==========================================================================
+   SECTION 17 — START-UP SEQUENCE
+   --------------------------------------------------------------------------
+   1. Three.js has already been imported (see the top of this module)
+   2. Run the town-building steps one at a time (so the loading bar moves)
+   3. Show the title screen. The Start button unlocks audio (later stage).
+   ========================================================================== */
+
+// Update the loading bar and its little caption.
+function setLoading(pct, note) {
+  const fill = document.getElementById('load-fill');
+  if (fill) fill.style.width = pct + '%';
+  if (note) {
+    const el = document.getElementById('load-note');
+    if (el) el.textContent = note;
+  }
+}
+
+async function start() {
+  try {
+    setLoading(6, 'Waking up the sun…');
+
+    // --- 1. Core scene objects ----------------------------------------
+    initToonLook();      // the toon light-ramp and the shared outline material
+    initRenderer();
+    initScene();
+    initCamera();
+    initLights();
+
+    // --- 2. Build the town, one step per frame ------------------------
+    const steps = townSteps();
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      setLoading(20 + (i / steps.length) * 78, step.label);
+      step.run();
+      // Yield to the browser so the loading bar actually repaints.
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    }
+
+    setLoading(100, 'Benvenuto a Etriente!');
+
+    // --- 3. Register the camera blockers ------------------------------
+    // Big box-shaped meshes (the building walls) are what the camera should
+    // not clip through. Small props would only make the camera jumpy.
+    scene.traverse((o) => {
+      if (o.isMesh && o.geometry && o.geometry.type === 'BoxGeometry' && !o.userData.noOutline) {
+        const p = o.geometry.parameters;
+        if (p && p.width > 4 && p.height > 3) cameraBlockers.push(o);
+      }
+    });
+
+    // --- 4. Wire up input and UI -------------------------------------
+    setupKeyboard();
+    setupMouse();
+    setupTouchCamera();
+    setupJoystick();
+    setupTouchUI();
+    setupUI();
+    buildMapPins();
+    drawMinimap();
+
+    // --- 5. First frame, then reveal the title screen -----------------
+    animate();
+
+    // A short pause so the last loading message is readable.
+    await new Promise((r) => setTimeout(r, 350));
+
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('title').classList.remove('hidden');
+
+    // The Start button. In a later stage this is also where the Web Audio
+    // context gets created (browsers only allow audio after a real click).
+    document.getElementById('btn-start').addEventListener('click', () => {
+      document.getElementById('title').classList.add('hidden');
+    });
+
+  } catch (err) {
+    // Something went wrong while building. Show the plain-language panel
+    // rather than a frozen loading bar. showStartupError() is defined by the
+    // classic script in the <head>, so it is always available here.
+    console.error('Etriente failed to start:', err);
+    showStartupError((err && err.message) || err);
+  }
+}
+
+// Go!
+start();
+
+/* ==========================================================================
+   SECTION 18 — INSPECTION HOOKS (used by tools/exec-test.mjs)
+   --------------------------------------------------------------------------
+   These attach a few read-only handles to `window` so the automated test can
+   check that the town really built, that the player walks, that collision
+   holds and that the blog overlays are wired up. They change nothing about
+   how the site behaves, and you can delete this whole block if you like —
+   the site will work exactly the same without it.
+   ========================================================================== */
+window.__scene = () => scene;
+window.__colliders = colliders;
+window.__interactables = interactables;
+window.__player = null;              // set once the character exists
+
+// Keep the player handle in sync as soon as start() finishes building.
+const __syncPlayer = setInterval(() => {
+  if (player) { window.__player = player; clearInterval(__syncPlayer); }
+}, 50);
+
+window.__pressKey = (k) => { keys[String(k).toLowerCase()] = true; };
+window.__releaseKey = (k) => { keys[String(k).toLowerCase()] = false; };
+window.__pressInteract = () => { input.interactPressed = true; };
+window.__updateInteraction = () => updateInteraction();
+window.__nearestInteractable = () => nearest;
+window.__moveAndCollide = (dx, dz) => moveAndCollide(dx, dz);
+window.__isBlocked = (x, z) => {
+  const R = CONFIG.player.radius;
+  for (const c of colliders) {
+    const cx = clamp(x, c.minX, c.maxX);
+    const cz = clamp(z, c.minZ, c.maxZ);
+    if ((x - cx) ** 2 + (z - cz) ** 2 < R * R) return true;
+  }
+  return false;
+};
+window.__worldCounts = () => ({
+  colliders: colliders.length,
+  interactables: interactables.length,
+  places: places.length,
+  buildings: mapBuildings.length,
+  trees: mapTrees.length,
+});
+window.__uiState = uiState;
+window.__openBlogSection = (key) => openBlogSection(key);
+
+/* ==========================================================================
+   STAGE ROADMAP (kept here so the plan lives with the code)
+   --------------------------------------------------------------------------
+   STAGE 1  (this file)  Done:
+     • Pastel toon look with outlines, warm hemisphere + sun, fog, gradient sky
+     • The town square, cobbled streets, fountain, tourist map board
+     • The five blog buildings, each with its own shape, sign and colour
+     • Third-person character built from primitives, with idle + walk + run
+     • WASD / arrows / Shift, mouse drag, wheel zoom, touch joystick
+     • Smooth damped follow camera that refuses to clip through buildings
+     • Circle-vs-box collision with wall sliding, plus world bounds
+     • Interaction prompts, fade transition, and the five blog overlays
+     • 2D map overlay with "you are here", directions and quick-travel
+     • Mini map, help sheet, loading screen, title screen
+
+   STAGE 2  Beach & sitting:
+     • Sunbeds, umbrellas, towels, a changing hut
+     • sit / lie-down animations, camera pulls in and lowers
+     • The Cozy Mode side panel (Pomodoro, session log, to-dos, journal)
+
+   STAGE 3  Audio, all generated with the Web Audio API:
+     • waves, café chatter, birds, rain — each with its own volume slider
+     • a lo-fi four-chord loop with play/pause
+
+   STAGE 4  Polish:
+     • seagulls landing, a festival with bunting, weather, day/night cycle
+     • more hidden corners, collectibles, and photo mode
+
+   STAGE 5  Mobile & performance:
+     • on-screen prompts for touch, larger tap targets
+     • instancing pass, shadow tuning, and a quality auto-detect
+   ========================================================================== */
+</script>
+</body>
+</html>
